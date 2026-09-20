@@ -102,7 +102,10 @@ const attemptSchema = new mongoose.Schema(
 );
 
 // High performance compound indexes
-attemptSchema.index({ studentId: 1, examId: 1 });
+attemptSchema.index(
+  { studentId: 1, examId: 1 },
+  { unique: true }
+);
 attemptSchema.index({ examId: 1, status: 1 });
 
 const Attempt = mongoose.model("Attempt", attemptSchema);
