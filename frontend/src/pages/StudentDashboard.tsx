@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Clock, FileQuestion, MinusCircle, Play } from "lucide-react";
 import { useAppSelector } from "../redux/hooks";
@@ -15,6 +16,7 @@ const API_URL = "http://localhost:5000/api";
 
 function StudentDashboard() {
   const user = useAppSelector((state) => state.auth.user);
+  const navigate = useNavigate();
 
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +50,49 @@ function StudentDashboard() {
     fetchPublishedExams();
   }, []);
 
+  // Start Exam
+  const handleStartExam = async (examId: string) => {
+    if (!user?.id) {
+      setError("Student information not found. Please login again.");
+      return;
+    }
+
+    try {
+      setError("");
+
+      const response = await fetch(
+        `${API_URL}/exams/${examId}/start`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            studentId: user.id,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Failed to start exam"
+        );
+      }
+
+      // Navigate to the exam page
+      navigate(`/exam/${data.attempt._id}`);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to start exam";
+
+      setError(message);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -57,6 +102,7 @@ function StudentDashboard() {
             <h1 className="text-2xl font-bold text-slate-900">
               ExamForge
             </h1>
+
             <p className="text-sm text-slate-500">
               Student Dashboard
             </p>
@@ -66,6 +112,7 @@ function StudentDashboard() {
             <p className="font-semibold text-slate-800">
               {user?.name || "Student"}
             </p>
+
             <p className="text-sm text-slate-500">
               {user?.email}
             </p>
@@ -88,13 +135,15 @@ function StudentDashboard() {
         {/* Loading */}
         {loading && (
           <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
-            <p className="text-slate-500">Loading exams...</p>
+            <p className="text-slate-500">
+              Loading exams...
+            </p>
           </div>
         )}
 
         {/* Error */}
         {!loading && error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
             {error}
           </div>
         )}
@@ -135,12 +184,16 @@ function StudentDashboard() {
                 <div className="space-y-3 text-sm">
                   <div className="flex items-center gap-3 text-slate-600">
                     <Clock className="h-5 w-5 text-slate-400" />
-                    <span>{exam.duration} minutes</span>
+                    <span>
+                      {exam.duration} minutes
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-3 text-slate-600">
                     <FileQuestion className="h-5 w-5 text-slate-400" />
-                    <span>{exam.questionCount} questions</span>
+                    <span>
+                      {exam.questionCount} questions
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-3 text-slate-600">
@@ -157,6 +210,7 @@ function StudentDashboard() {
                 {/* Start Button */}
                 <button
                   type="button"
+                  onClick={() => handleStartExam(exam._id)}
                   className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-700"
                 >
                   <Play className="h-5 w-5" />

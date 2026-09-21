@@ -9,6 +9,7 @@ const dotenv = require("dotenv");
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const examRoutes = require("./routes/examRoutes");
+const attemptRoutes = require("./routes/attemptRoutes");
 
 
 dotenv.config();
@@ -21,6 +22,7 @@ app.use(cors());
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/exams", examRoutes);
+app.use("/api/attempts", attemptRoutes);
 
 connectDB();
 
