@@ -8,6 +8,7 @@ import {
 import {
   AlertCircle,
   ArrowRight,
+  BarChart3,
   BookOpen,
   CheckCircle2,
   Clock3,
@@ -433,6 +434,19 @@ function InstructorDashboard() {
     ) => {
       navigate(
         `/instructor/exams/${examId}/edit`
+      );
+    };
+
+  // ====================================================
+  // VIEW RESULTS
+  // ====================================================
+
+  const handleViewResults =
+    (
+      examId: string
+    ) => {
+      navigate(
+        `/instructor/exams/${examId}/results`
       );
     };
 
@@ -1154,6 +1168,20 @@ function InstructorDashboard() {
                         Question Bank
 
                         <ArrowRight className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleViewResults(
+                            exam._id
+                          )
+                        }
+                        className="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                      >
+                        <BarChart3 className="h-4 w-4" />
+
+                        Results
                       </button>
 
                       <button

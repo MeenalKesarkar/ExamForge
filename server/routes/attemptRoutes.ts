@@ -1,9 +1,15 @@
 import { Router, Response } from "express";
 import mongoose from "mongoose";
 
-import Attempt from "../models/Attempt";
+import Attempt, {
+  IAttempt,
+} from "../models/Attempt";
+
 import Exam from "../models/Exam";
-import Question from "../models/Question";
+
+import Question, {
+  IQuestion,
+} from "../models/Question";
 
 import {
   requireAuth,
@@ -16,18 +22,20 @@ const router = Router();
    TYPES
 ========================================================= */
 
-type AttemptStatus =
-  | "IN_PROGRESS"
-  | "SUBMITTED"
-  | "EVALUATED"
-  | "TIMED_OUT";
+type AnswerMap = Record<string, string[]>;
 
-interface StoredAnswers {
-  [questionId: string]: string[];
+interface ScoreResult {
+  score: number;
+  totalMarks: number;
+  percentage: number;
+  passed: boolean;
+  correctCount: number;
+  incorrectCount: number;
+  unansweredCount: number;
 }
 
 /* =========================================================
-   BASIC HELPERS
+   HELPERS
 ========================================================= */
 
 const isValidObjectId = (
@@ -47,92 +55,34 @@ const getParam = (
 };
 
 const normalizeAnswers = (
-  value: unknown
+  answers: unknown
 ): string[] => {
-  if (!Array.isArray(value)) {
+  if (!Array.isArray(answers)) {
     return [];
   }
 
-  return value
-    .filter(
-      (item): item is string =>
-        typeof item === "string"
-    )
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return answers
+    .map((answer: unknown) => String(answer))
+    .filter((answer: string) => answer.length > 0);
 };
 
-/* =========================================================
-   SAFE DATE HELPER
-========================================================= */
-
-const getDate = (
-  value: Date | string | null | undefined
-): Date | null => {
-  if (!value) {
-    return null;
-  }
-
-  const date =
-    value instanceof Date
-      ? value
-      : new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date;
-};
-
-/* =========================================================
-   ANSWER STORAGE
-========================================================= */
-
-const getStoredAnswers = (
-  attempt: any
-): StoredAnswers => {
-  if (
-    !attempt.answers ||
-    typeof attempt.answers !== "object" ||
-    Array.isArray(attempt.answers)
-  ) {
-    return {};
-  }
-
-  return attempt.answers as StoredAnswers;
-};
-
-/* =========================================================
-   EXACT ANSWER SET COMPARISON
-========================================================= */
-
-const areExactAnswerSets = (
-  studentAnswers: string[],
-  correctAnswers: string[]
+const sameAnswerSet = (
+  first: string[],
+  second: string[]
 ): boolean => {
-  if (
-    studentAnswers.length !==
-    correctAnswers.length
-  ) {
+  if (first.length !== second.length) {
     return false;
   }
 
-  const studentSet =
-    new Set(studentAnswers);
+  const firstSet = new Set(first);
+  const secondSet = new Set(second);
 
-  const correctSet =
-    new Set(correctAnswers);
-
-  if (
-    studentSet.size !==
-    correctSet.size
-  ) {
+  if (firstSet.size !== secondSet.size) {
     return false;
   }
 
-  for (const answer of correctSet) {
-    if (!studentSet.has(answer)) {
+  for (const value of firstSet) {
+    if (!secondSet.has(value)) {
       return false;
     }
   }
@@ -141,111 +91,86 @@ const areExactAnswerSets = (
 };
 
 /* =========================================================
-   SCORE CALCULATION
+   CALCULATE SCORE
 ========================================================= */
 
-const calculateScore = (
-  questions: any[],
-  answers: StoredAnswers,
-  negativeMarking: boolean,
-  negativePenalty: number
-) => {
-  let score = 0;
-
-  let correctCount = 0;
-  let incorrectCount = 0;
-  let answeredCount = 0;
-  let unansweredCount = 0;
-
-  const questionResults =
-    questions.map((question) => {
-      const questionId =
-        question._id.toString();
-
-      const studentAnswer =
-        normalizeAnswers(
-          answers[questionId]
-        );
-
-      const correctAnswers =
-        normalizeAnswers(
-          question.correctAnswers
-        );
-
-      const isAnswered =
-        studentAnswer.length > 0;
-
-      if (!isAnswered) {
-        unansweredCount += 1;
-
-        return {
-          questionId,
-          answered: false,
-          correct: false,
-          marks: 0,
-        };
-      }
-
-      answeredCount += 1;
-
-      const isCorrect =
-        areExactAnswerSets(
-          studentAnswer,
-          correctAnswers
-        );
-
-      if (isCorrect) {
-        correctCount += 1;
-
-        const marks = Number(
-          question.marks || 0
-        );
-
-        score += marks;
-
-        return {
-          questionId,
-          answered: true,
-          correct: true,
-          marks,
-        };
-      }
-
-      incorrectCount += 1;
-
-      let marks = 0;
-
-      if (negativeMarking) {
-        marks =
-          -Number(
-            negativePenalty || 0
-          );
-      }
-
-      score += marks;
-
-      return {
-        questionId,
-        answered: true,
-        correct: false,
-        marks,
-      };
+const calculateScore = async (
+  attempt: IAttempt,
+  exam: any
+): Promise<ScoreResult> => {
+  const questions: IQuestion[] =
+    await Question.find({
+      _id: {
+        $in: attempt.questionIds,
+      },
     });
 
-  /*
-   * Score cannot go below zero.
-   */
-  score = Math.max(0, score);
+  let score = 0;
+  let correctCount = 0;
+  let incorrectCount = 0;
+  let unansweredCount = 0;
+
+  const answers =
+    (attempt.answers || {}) as AnswerMap;
+
+  for (const question of questions) {
+    const questionId =
+      question._id.toString();
+
+    const selectedAnswers =
+      normalizeAnswers(
+        answers[questionId]
+      );
+
+    const correctAnswers =
+      normalizeAnswers(
+        question.correctAnswers
+      );
+
+    if (selectedAnswers.length === 0) {
+      unansweredCount += 1;
+      continue;
+    }
+
+    const isCorrect =
+      sameAnswerSet(
+        selectedAnswers,
+        correctAnswers
+      );
+
+    if (isCorrect) {
+      correctCount += 1;
+
+      score += Number(
+        question.marks || 0
+      );
+    } else {
+      incorrectCount += 1;
+
+      if (exam.negativeMarking) {
+        score -= Number(
+          exam.negativePenalty || 0
+        );
+      }
+    }
+  }
 
   const totalMarks =
-    questions.reduce(
-      (total, question) =>
-        total +
-        Number(
-          question.marks || 0
-        ),
-      0
-    );
+    typeof exam.totalMarks === "number"
+      ? exam.totalMarks
+      : questions.reduce(
+          (
+            total: number,
+            question: IQuestion
+          ) =>
+            total +
+            Number(
+              question.marks || 0
+            ),
+          0
+        );
+
+  score = Math.max(0, score);
 
   const percentage =
     totalMarks > 0
@@ -257,108 +182,117 @@ const calculateScore = (
         )
       : 0;
 
+  const passed =
+    score >=
+    Number(exam.passingMarks || 0);
+
   return {
     score,
     totalMarks,
     percentage,
+    passed,
     correctCount,
     incorrectCount,
-    answeredCount,
     unansweredCount,
-    questionResults,
   };
 };
 
 /* =========================================================
-   GET QUESTIONS BELONGING TO ATTEMPT
+   CLOSE EXPIRED ATTEMPT
 ========================================================= */
 
-const getAttemptQuestions =
-  async (attempt: any) => {
-    const questionIds =
-      Array.isArray(
-        attempt.questionIds
-      )
-        ? attempt.questionIds
-        : [];
+const closeExpiredAttempt = async (
+  attempt: IAttempt,
+  exam: any
+): Promise<boolean> => {
+  if (
+    attempt.status !== "IN_PROGRESS" ||
+    new Date() <
+      new Date(attempt.endTime)
+  ) {
+    return false;
+  }
 
-    if (questionIds.length === 0) {
-      return [];
-    }
+  const result =
+    await calculateScore(
+      attempt,
+      exam
+    );
 
-    const questions =
-      await Question.find({
-        _id: {
-          $in: questionIds,
-        },
-      }).lean();
+  attempt.status = "TIMED_OUT";
 
-    /*
-     * Preserve the exact order stored
-     * inside the Attempt.
-     */
-    const questionMap =
-      new Map<string, any>();
+  attempt.submittedAt =
+    attempt.endTime;
 
-    for (const question of questions) {
-      questionMap.set(
-        question._id.toString(),
-        question
-      );
-    }
+  attempt.score =
+    result.score;
 
-    return questionIds
-      .map((questionId: any) =>
-        questionMap.get(
-          questionId.toString()
-        )
-      )
-      .filter(Boolean);
-  };
+  attempt.totalMarks =
+    result.totalMarks;
 
-/* =========================================================
-   REMOVE ANSWER KEY FROM STUDENT RESPONSE
-========================================================= */
+  attempt.percentage =
+    result.percentage;
 
-const sanitizeQuestionForStudent = (
-  question: any
-) => {
-  return {
-    _id: question._id,
-    examId: question.examId,
-    questionText:
-      question.questionText,
-    type: question.type,
-    options: question.options,
-    marks: question.marks,
-    explanation:
-      question.explanation,
-    difficulty:
-      question.difficulty,
-    order: question.order,
-  };
+  attempt.passed =
+    result.passed;
+
+  await attempt.save();
+
+  return true;
 };
 
 /* =========================================================
-   GET ATTEMPT AND VERIFY OWNERSHIP
+   STUDENT OWNERSHIP
 ========================================================= */
 
-const getOwnedAttempt =
+const requireStudentOwnership = (
+  req: AuthenticatedRequest,
+  res: Response,
+  studentId: string
+): boolean => {
+  if (!req.user) {
+    res.status(401).json({
+      message:
+        "Authentication required",
+    });
+
+    return false;
+  }
+
+  if (req.user.role !== "student") {
+    res.status(403).json({
+      message:
+        "Student access required",
+    });
+
+    return false;
+  }
+
+  if (
+    req.user.userId !== studentId
+  ) {
+    res.status(403).json({
+      message:
+        "You do not have access to this attempt",
+    });
+
+    return false;
+  }
+
+  return true;
+};
+
+/* =========================================================
+   INSTRUCTOR EXAM ACCESS
+========================================================= */
+
+const requireInstructorExamAccess =
   async (
-    attemptId: string,
     req: AuthenticatedRequest,
-    res: Response
+    res: Response,
+    examId: string
   ) => {
-    if (!isValidObjectId(attemptId)) {
-      res.status(400).json({
-        message:
-          "Invalid attempt ID",
-      });
-
-      return null;
-    }
-
-    if (!req.user?.userId) {
+    if (!req.user) {
       res.status(401).json({
         message:
           "Authentication required",
@@ -367,195 +301,55 @@ const getOwnedAttempt =
       return null;
     }
 
-    const attempt =
-      await Attempt.findById(
-        attemptId
-      );
-
-    if (!attempt) {
-      res.status(404).json({
-        message:
-          "Attempt not found",
-      });
-
-      return null;
-    }
-
-    /*
-     * Student can access only their own attempt.
-     */
     if (
-      req.user.role === "student" &&
-      attempt.studentId.toString() !==
-        req.user.userId
+      req.user.role !== "instructor"
     ) {
       res.status(403).json({
         message:
-          "You are not allowed to access this attempt",
+          "Instructor access required",
       });
 
       return null;
     }
 
-    return attempt;
-  };
+    if (!isValidObjectId(examId)) {
+      res.status(400).json({
+        message:
+          "Invalid exam ID",
+      });
 
-/* =========================================================
-   SCORE + CLOSE EXPIRED ATTEMPT
-========================================================= */
+      return null;
+    }
 
-const closeExpiredAttempt =
-  async (
-    attempt: any,
-    exam: any
-  ): Promise<boolean> => {
+    const exam =
+      await Exam.findById(examId);
+
+    if (!exam) {
+      res.status(404).json({
+        message:
+          "Exam not found",
+      });
+
+      return null;
+    }
+
     if (
-      attempt.status !==
-      "IN_PROGRESS"
+      exam.createdBy.toString() !==
+      req.user.userId
     ) {
-      return false;
+      res.status(403).json({
+        message:
+          "You do not have access to this exam",
+      });
+
+      return null;
     }
 
-    const now = new Date();
-
-    const endTime = getDate(
-      attempt.endTime
-    );
-
-    /*
-     * If no valid end time exists, do not
-     * automatically close the attempt.
-     */
-    if (!endTime) {
-      return false;
-    }
-
-    if (now < endTime) {
-      return false;
-    }
-
-    const questions =
-      await getAttemptQuestions(
-        attempt
-      );
-
-    const answers =
-      getStoredAnswers(
-        attempt
-      );
-
-    const result =
-      calculateScore(
-        questions,
-        answers,
-        Boolean(
-          exam.negativeMarking
-        ),
-        Number(
-          exam.negativePenalty || 0
-        )
-      );
-
-    /*
-     * Only save fields that actually exist
-     * in the Attempt model.
-     */
-    attempt.score =
-      result.score;
-
-    attempt.totalMarks =
-      result.totalMarks;
-
-    attempt.percentage =
-      result.percentage;
-
-    attempt.passed =
-      result.score >=
-      Number(
-        exam.passingMarks || 0
-      );
-
-    attempt.submittedAt = now;
-
-    attempt.status =
-      "TIMED_OUT";
-
-    await attempt.save();
-
-    return true;
+    return exam;
   };
 
 /* =========================================================
-   BUILD RESULT
-========================================================= */
-
-const buildAttemptResult =
-  async (
-    attempt: any,
-    exam: any
-  ) => {
-    const questions =
-      await getAttemptQuestions(
-        attempt
-      );
-
-    const answers =
-      getStoredAnswers(
-        attempt
-      );
-
-    const result =
-      calculateScore(
-        questions,
-        answers,
-        Boolean(
-          exam.negativeMarking
-        ),
-        Number(
-          exam.negativePenalty || 0
-        )
-      );
-
-    return {
-      score:
-        result.score,
-
-      totalMarks:
-        result.totalMarks,
-
-      percentage:
-        result.percentage,
-
-      passed:
-        result.score >=
-        Number(
-          exam.passingMarks || 0
-        ),
-
-      passingMarks:
-        Number(
-          exam.passingMarks || 0
-        ),
-
-      correctCount:
-        result.correctCount,
-
-      incorrectCount:
-        result.incorrectCount,
-
-      unansweredCount:
-        result.unansweredCount,
-
-      answeredCount:
-        result.answeredCount,
-
-      questionResults:
-        result.questionResults,
-    };
-  };
-
-/* =========================================================
-   GET ATTEMPT
+   GET SINGLE ATTEMPT
    GET /api/attempts/:attemptId
 ========================================================= */
 
@@ -567,312 +361,186 @@ router.get(
     res: Response
   ) => {
     try {
-      const attemptId = getParam(
-        req.params.attemptId
-      );
-
-      const attempt =
-        await getOwnedAttempt(
-          attemptId,
-          req,
-          res
+      const attemptId =
+        getParam(
+          req.params.attemptId
         );
 
-      if (!attempt) {
-        return;
-      }
-
-      const exam =
-        await Exam.findById(
-          attempt.examId
-        ).lean();
-
-      if (!exam) {
-        return res.status(404).json({
+      if (!isValidObjectId(attemptId)) {
+        return res.status(400).json({
           message:
-            "Exam associated with this attempt was not found",
+            "Invalid attempt ID",
         });
       }
 
-      /*
-       * If the server deadline has passed,
-       * automatically close and score it.
-       */
-      await closeExpiredAttempt(
-        attempt,
-        exam
-      );
-
-      const currentAttempt =
+      const attempt =
         await Attempt.findById(
-          attempt._id
+          attemptId
         );
 
-      if (!currentAttempt) {
+      if (!attempt) {
         return res.status(404).json({
           message:
             "Attempt not found",
         });
       }
 
-      const questions =
-        await getAttemptQuestions(
-          currentAttempt
-        );
-
-      const safeQuestions =
-        questions.map(
-          sanitizeQuestionForStudent
-        );
-
-      const answers =
-        getStoredAnswers(
-          currentAttempt
-        );
-
-      const serverNow =
-        new Date();
-
-      /* -----------------------------------------------------
-         COMPLETED ATTEMPT
-      ----------------------------------------------------- */
-
       if (
-        currentAttempt.status !==
-        "IN_PROGRESS"
+        !req.user ||
+        req.user.userId !==
+          attempt.studentId.toString()
       ) {
-        const result =
-          await buildAttemptResult(
-            currentAttempt,
-            exam
-          );
-
-        return res.status(200).json({
-          attempt: {
-            _id:
-              currentAttempt._id,
-
-            examId:
-              currentAttempt.examId,
-
-            studentId:
-              currentAttempt.studentId,
-
-            questionIds:
-              currentAttempt.questionIds,
-
-            answers,
-
-            startTime:
-              currentAttempt.startTime,
-
-            endTime:
-              currentAttempt.endTime,
-
-            submittedAt:
-              currentAttempt.submittedAt,
-
-            status:
-              currentAttempt.status,
-
-            score:
-              currentAttempt.score,
-
-            totalMarks:
-              currentAttempt.totalMarks,
-
-            percentage:
-              currentAttempt.percentage,
-
-            passed:
-              currentAttempt.passed,
-          },
-
-          exam: {
-            _id: exam._id,
-            title: exam.title,
-            subject: exam.subject,
-            duration:
-              exam.duration,
-
-            totalMarks:
-              exam.totalMarks,
-
-            passingMarks:
-              exam.passingMarks,
-
-            negativeMarking:
-              exam.negativeMarking,
-
-            negativePenalty:
-              exam.negativePenalty,
-          },
-
-          questions:
-            safeQuestions,
-
-          serverNow,
-
-          result,
+        return res.status(403).json({
+          message:
+            "You do not have access to this attempt",
         });
       }
 
-      /* -----------------------------------------------------
-         ACTIVE ATTEMPT
-      ----------------------------------------------------- */
+      const exam =
+        await Exam.findById(
+          attempt.examId
+        );
 
-      const endTime = getDate(
-        currentAttempt.endTime
+      if (!exam) {
+        return res.status(404).json({
+          message:
+            "Exam not found",
+        });
+      }
+
+      await closeExpiredAttempt(
+        attempt,
+        exam
       );
 
-      /*
-       * A valid end time should always exist for
-       * an active attempt.
-       */
-      if (!endTime) {
-        return res.status(500).json({
-          message:
-            "This attempt does not have a valid end time",
-        });
-      }
+      const now = new Date();
 
       const remainingSeconds =
-        Math.max(
-          0,
-          Math.floor(
+        attempt.status ===
+        "IN_PROGRESS"
+          ? Math.max(
+              0,
+              Math.floor(
+                (
+                  new Date(
+                    attempt.endTime
+                  ).getTime() -
+                  now.getTime()
+                ) / 1000
+              )
+            )
+          : 0;
+
+      const questions: IQuestion[] =
+        await Question.find({
+          _id: {
+            $in: attempt.questionIds,
+          },
+        });
+
+      const questionMap =
+        new Map<
+          string,
+          IQuestion
+        >(
+          questions.map(
             (
-              endTime.getTime() -
-              serverNow.getTime()
-            ) / 1000
+              question: IQuestion
+            ) => [
+              question._id.toString(),
+              question,
+            ]
           )
         );
 
-      /*
-       * Extra protection:
-       * if it reached zero between the first
-       * expiry check and this response, close it.
-       */
-      if (remainingSeconds <= 0) {
-        await closeExpiredAttempt(
-          currentAttempt,
-          exam
-        );
+      const sanitizedQuestions =
+        attempt.questionIds
+          .map(
+            (
+              questionId: mongoose.Types.ObjectId
+            ) => {
+              const question =
+                questionMap.get(
+                  questionId.toString()
+                );
 
-        const expiredAttempt =
-          await Attempt.findById(
-            currentAttempt._id
+              if (!question) {
+                return null;
+              }
+
+              return {
+                _id: question._id,
+                questionText:
+                  question.questionText,
+                type: question.type,
+                options:
+                  question.options,
+                marks: question.marks,
+                difficulty:
+                  question.difficulty,
+                order:
+                  question.order,
+              };
+            }
+          )
+          .filter(
+            (
+              question:
+                | {
+                    _id: mongoose.Types.ObjectId;
+                    questionText: string;
+                    type: string;
+                    options: string[];
+                    marks: number;
+                    difficulty: string;
+                    order: number;
+                  }
+                | null
+            ): question is NonNullable<
+              typeof question
+            > =>
+              question !== null
           );
 
-        if (!expiredAttempt) {
-          return res.status(404).json({
-            message:
-              "Attempt not found",
-          });
-        }
+      const answers =
+        (attempt.answers ||
+          {}) as AnswerMap;
 
-        const result =
-          await buildAttemptResult(
-            expiredAttempt,
-            exam
-          );
-
-        return res.status(200).json({
-          attempt: {
-            _id:
-              expiredAttempt._id,
-
-            examId:
-              expiredAttempt.examId,
-
-            studentId:
-              expiredAttempt.studentId,
-
-            questionIds:
-              expiredAttempt.questionIds,
-
-            answers:
-              getStoredAnswers(
-                expiredAttempt
-              ),
-
-            startTime:
-              expiredAttempt.startTime,
-
-            endTime:
-              expiredAttempt.endTime,
-
-            submittedAt:
-              expiredAttempt.submittedAt,
-
-            status:
-              expiredAttempt.status,
-
-            score:
-              expiredAttempt.score,
-
-            totalMarks:
-              expiredAttempt.totalMarks,
-
-            percentage:
-              expiredAttempt.percentage,
-
-            passed:
-              expiredAttempt.passed,
-          },
-
-          exam: {
-            _id: exam._id,
-            title: exam.title,
-            subject: exam.subject,
-            duration:
-              exam.duration,
-            totalMarks:
-              exam.totalMarks,
-            passingMarks:
-              exam.passingMarks,
-            negativeMarking:
-              exam.negativeMarking,
-            negativePenalty:
-              exam.negativePenalty,
-          },
-
-          questions:
-            safeQuestions,
-
-          serverNow,
-
-          result,
-        });
-      }
+      const result =
+        attempt.status ===
+        "IN_PROGRESS"
+          ? null
+          : {
+              score:
+                attempt.score ?? 0,
+              totalMarks:
+                attempt.totalMarks ??
+                exam.totalMarks,
+              percentage:
+                attempt.percentage ??
+                0,
+              passed:
+                attempt.passed ??
+                false,
+            };
 
       return res.status(200).json({
         attempt: {
-          _id:
-            currentAttempt._id,
-
-          examId:
-            currentAttempt.examId,
-
-          studentId:
-            currentAttempt.studentId,
-
+          _id: attempt._id,
+          examId: attempt.examId,
           questionIds:
-            currentAttempt.questionIds,
-
+            attempt.questionIds,
           answers,
-
           startTime:
-            currentAttempt.startTime,
-
+            attempt.startTime,
           endTime:
-            currentAttempt.endTime,
-
+            attempt.endTime,
+          submittedAt:
+            attempt.submittedAt,
           status:
-            currentAttempt.status,
-
+            attempt.status,
           tabSwitchCount:
-            currentAttempt.tabSwitchCount ||
-            0,
+            attempt.tabSwitchCount,
         },
 
         exam: {
@@ -881,33 +549,32 @@ router.get(
           subject: exam.subject,
           duration:
             exam.duration,
-
+          questionCount:
+            exam.questionCount,
           totalMarks:
             exam.totalMarks,
-
           passingMarks:
             exam.passingMarks,
-
           negativeMarking:
             exam.negativeMarking,
-
           negativePenalty:
             exam.negativePenalty,
-
           instructions:
             exam.instructions,
         },
 
         questions:
-          safeQuestions,
+          sanitizedQuestions,
 
-        serverNow,
+        serverNow: now,
 
         remainingSeconds,
+
+        result,
       });
     } catch (error) {
       console.error(
-        "GET /api/attempts/:attemptId error:",
+        "Get attempt error:",
         error
       );
 
@@ -932,29 +599,51 @@ router.patch(
     res: Response
   ) => {
     try {
-      if (
-        req.user?.role !==
-        "student"
-      ) {
-        return res.status(403).json({
+      const attemptId =
+        getParam(
+          req.params.attemptId
+        );
+
+      if (!isValidObjectId(attemptId)) {
+        return res.status(400).json({
           message:
-            "Only students can save answers",
+            "Invalid attempt ID",
         });
       }
 
-      const attemptId = getParam(
-        req.params.attemptId
-      );
-
       const attempt =
-        await getOwnedAttempt(
-          attemptId,
-          req,
-          res
+        await Attempt.findById(
+          attemptId
         );
 
       if (!attempt) {
-        return;
+        return res.status(404).json({
+          message:
+            "Attempt not found",
+        });
+      }
+
+      if (
+        !req.user ||
+        req.user.userId !==
+          attempt.studentId.toString()
+      ) {
+        return res.status(403).json({
+          message:
+            "You do not have access to this attempt",
+        });
+      }
+
+      if (
+        attempt.status !==
+        "IN_PROGRESS"
+      ) {
+        return res.status(409).json({
+          message:
+            "This attempt is no longer active",
+          status:
+            attempt.status,
+        });
       }
 
       const exam =
@@ -965,65 +654,48 @@ router.patch(
       if (!exam) {
         return res.status(404).json({
           message:
-            "Exam associated with this attempt was not found",
+            "Exam not found",
         });
       }
 
-      /*
-       * Check server-side expiry first.
-       */
-      const wasExpired =
+      const expired =
         await closeExpiredAttempt(
           attempt,
           exam
         );
 
-      if (
-        wasExpired ||
-        attempt.status !==
-          "IN_PROGRESS"
-      ) {
-        const currentAttempt =
-          await Attempt.findById(
-            attempt._id
-          );
-
+      if (expired) {
         return res.status(409).json({
           message:
-            "This exam attempt is no longer active",
-
+            "Exam time has expired",
           status:
-            currentAttempt?.status ||
-            attempt.status,
+            "TIMED_OUT",
         });
       }
 
       const questionId =
-        typeof req.body.questionId ===
+        typeof req.body?.questionId ===
         "string"
-          ? req.body.questionId.trim()
+          ? req.body.questionId
           : "";
-
-      if (
-        !questionId ||
-        !isValidObjectId(questionId)
-      ) {
-        return res.status(400).json({
-          message:
-            "Valid question ID is required",
-        });
-      }
 
       const selectedAnswers =
         normalizeAnswers(
-          req.body.selectedAnswers
+          req.body?.answers
         );
 
-      /*
-       * Verify that this question belongs
-       * to the student's fixed question set.
-       */
-      const assignedQuestion =
+      if (
+        !isValidObjectId(
+          questionId
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "Invalid question ID",
+        });
+      }
+
+      const questionBelongsToAttempt =
         attempt.questionIds.some(
           (
             id: mongoose.Types.ObjectId
@@ -1032,17 +704,17 @@ router.patch(
             questionId
         );
 
-      if (!assignedQuestion) {
-        return res.status(403).json({
+      if (!questionBelongsToAttempt) {
+        return res.status(400).json({
           message:
-            "This question is not part of your exam attempt",
+            "This question does not belong to the attempt",
         });
       }
 
       const question =
         await Question.findById(
           questionId
-        ).lean();
+        );
 
       if (!question) {
         return res.status(404).json({
@@ -1051,31 +723,6 @@ router.patch(
         });
       }
 
-      /*
-       * Validate selected options.
-       */
-      const validOptions =
-        new Set(
-          question.options
-        );
-
-      const invalidAnswer =
-        selectedAnswers.some(
-          (answer) =>
-            !validOptions.has(answer)
-        );
-
-      if (invalidAnswer) {
-        return res.status(400).json({
-          message:
-            "One or more selected answers are invalid",
-        });
-      }
-
-      /*
-       * Single-choice questions can have
-       * only one selected answer.
-       */
       if (
         question.type ===
           "single" &&
@@ -1083,27 +730,38 @@ router.patch(
       ) {
         return res.status(400).json({
           message:
-            "This question accepts only one answer",
+            "A single-choice question can have only one answer",
         });
       }
 
-      /*
-       * Save progressively.
-       */
-      const currentAnswers =
-        getStoredAnswers(
-          attempt
+      const invalidOption =
+        selectedAnswers.some(
+          (
+            answer: string
+          ) =>
+            !question.options.includes(
+              answer
+            )
         );
 
-      currentAnswers[questionId] =
-        selectedAnswers;
+      if (invalidOption) {
+        return res.status(400).json({
+          message:
+            "One or more selected options are invalid",
+        });
+      }
+
+      const currentAnswers =
+        (attempt.answers ||
+          {}) as AnswerMap;
+
+      currentAnswers[
+        questionId
+      ] = selectedAnswers;
 
       attempt.answers =
         currentAnswers;
 
-      /*
-       * Important because answers is Mixed.
-       */
       attempt.markModified(
         "answers"
       );
@@ -1112,15 +770,14 @@ router.patch(
 
       return res.status(200).json({
         message:
-          "Answer saved successfully",
+          "Answer saved",
 
-        questionId,
-
-        selectedAnswers,
+        answers:
+          attempt.answers,
       });
     } catch (error) {
       console.error(
-        "PATCH /api/attempts/:attemptId/answer error:",
+        "Save answer error:",
         error
       );
 
@@ -1145,29 +802,51 @@ router.patch(
     res: Response
   ) => {
     try {
-      if (
-        req.user?.role !==
-        "student"
-      ) {
-        return res.status(403).json({
+      const attemptId =
+        getParam(
+          req.params.attemptId
+        );
+
+      if (!isValidObjectId(attemptId)) {
+        return res.status(400).json({
           message:
-            "Only students can update this value",
+            "Invalid attempt ID",
         });
       }
 
-      const attemptId = getParam(
-        req.params.attemptId
-      );
-
       const attempt =
-        await getOwnedAttempt(
-          attemptId,
-          req,
-          res
+        await Attempt.findById(
+          attemptId
         );
 
       if (!attempt) {
-        return;
+        return res.status(404).json({
+          message:
+            "Attempt not found",
+        });
+      }
+
+      if (
+        !req.user ||
+        req.user.userId !==
+          attempt.studentId.toString()
+      ) {
+        return res.status(403).json({
+          message:
+            "Access denied",
+        });
+      }
+
+      if (
+        attempt.status !==
+        "IN_PROGRESS"
+      ) {
+        return res.status(409).json({
+          message:
+            "Attempt is no longer active",
+          status:
+            attempt.status,
+        });
       }
 
       const exam =
@@ -1182,27 +861,22 @@ router.patch(
         });
       }
 
-      const wasExpired =
+      const expired =
         await closeExpiredAttempt(
           attempt,
           exam
         );
 
-      if (
-        wasExpired ||
-        attempt.status !==
-          "IN_PROGRESS"
-      ) {
+      if (expired) {
         return res.status(409).json({
           message:
-            "This exam attempt is no longer active",
+            "Exam time has expired",
+          status:
+            "TIMED_OUT",
         });
       }
 
-      attempt.tabSwitchCount =
-        Number(
-          attempt.tabSwitchCount || 0
-        ) + 1;
+      attempt.tabSwitchCount += 1;
 
       await attempt.save();
 
@@ -1215,7 +889,7 @@ router.patch(
       });
     } catch (error) {
       console.error(
-        "PATCH /api/attempts/:attemptId/tab-switch error:",
+        "Tab switch error:",
         error
       );
 
@@ -1240,29 +914,39 @@ router.post(
     res: Response
   ) => {
     try {
-      if (
-        req.user?.role !==
-        "student"
-      ) {
-        return res.status(403).json({
+      const attemptId =
+        getParam(
+          req.params.attemptId
+        );
+
+      if (!isValidObjectId(attemptId)) {
+        return res.status(400).json({
           message:
-            "Only students can submit exams",
+            "Invalid attempt ID",
         });
       }
 
-      const attemptId = getParam(
-        req.params.attemptId
-      );
-
       const attempt =
-        await getOwnedAttempt(
-          attemptId,
-          req,
-          res
+        await Attempt.findById(
+          attemptId
         );
 
       if (!attempt) {
-        return;
+        return res.status(404).json({
+          message:
+            "Attempt not found",
+        });
+      }
+
+      if (
+        !req.user ||
+        req.user.userId !==
+          attempt.studentId.toString()
+      ) {
+        return res.status(403).json({
+          message:
+            "You do not have access to this attempt",
+        });
       }
 
       const exam =
@@ -1273,95 +957,50 @@ router.post(
       if (!exam) {
         return res.status(404).json({
           message:
-            "Exam associated with this attempt was not found",
+            "Exam not found",
         });
       }
 
-      /*
-       * If already completed, simply return
-       * the existing result.
-       */
       if (
         attempt.status !==
         "IN_PROGRESS"
       ) {
-        const result =
-          await buildAttemptResult(
-            attempt,
-            exam
-          );
-
-        return res.status(200).json({
+        return res.status(409).json({
           message:
             "This attempt has already been completed",
 
-          attempt: {
-            _id:
-              attempt._id,
+          status:
+            attempt.status,
 
-            status:
-              attempt.status,
+          score:
+            attempt.score ?? 0,
 
-            submittedAt:
-              attempt.submittedAt,
-          },
+          totalMarks:
+            attempt.totalMarks ??
+            exam.totalMarks,
 
-          result,
+          percentage:
+            attempt.percentage ?? 0,
+
+          passed:
+            attempt.passed ?? false,
         });
       }
 
-      const now =
-        new Date();
+      const now = new Date();
 
-      const endTime =
-        getDate(
+      const isExpired =
+        now >=
+        new Date(
           attempt.endTime
         );
 
-      /*
-       * If endTime is missing, we cannot
-       * safely determine whether the exam expired.
-       */
-      if (!endTime) {
-        return res.status(500).json({
-          message:
-            "This attempt does not have a valid end time",
-        });
-      }
-
-      const expired =
-        now.getTime() >=
-        endTime.getTime();
-
-      const questions =
-        await getAttemptQuestions(
-          attempt
-        );
-
-      const answers =
-        getStoredAnswers(
-          attempt
-        );
-
-      /*
-       * Backend-only scoring.
-       */
       const result =
-        calculateScore(
-          questions,
-          answers,
-          Boolean(
-            exam.negativeMarking
-          ),
-          Number(
-            exam.negativePenalty || 0
-          )
+        await calculateScore(
+          attempt,
+          exam
         );
 
-      /*
-       * Save only fields supported by
-       * the Attempt model.
-       */
       attempt.score =
         result.score;
 
@@ -1372,41 +1011,54 @@ router.post(
         result.percentage;
 
       attempt.passed =
-        result.score >=
-        Number(
-          exam.passingMarks || 0
-        );
+        result.passed;
 
       attempt.submittedAt =
-        now;
+        isExpired
+          ? attempt.endTime
+          : now;
 
-      attempt.status = expired
-        ? "TIMED_OUT"
-        : "SUBMITTED";
+      attempt.status =
+        isExpired
+          ? "TIMED_OUT"
+          : "SUBMITTED";
 
       await attempt.save();
 
       return res.status(200).json({
-        message: expired
-          ? "Time expired. Your exam has been submitted automatically."
-          : "Exam submitted successfully.",
+        message:
+          isExpired
+            ? "Exam time expired and attempt was submitted automatically"
+            : "Exam submitted successfully",
 
         attempt: {
-          _id:
-            attempt._id,
-
+          _id: attempt._id,
           status:
             attempt.status,
-
           submittedAt:
             attempt.submittedAt,
         },
 
-        result,
+        result: {
+          score:
+            result.score,
+          totalMarks:
+            result.totalMarks,
+          percentage:
+            result.percentage,
+          passed:
+            result.passed,
+          correctCount:
+            result.correctCount,
+          incorrectCount:
+            result.incorrectCount,
+          unansweredCount:
+            result.unansweredCount,
+        },
       });
     } catch (error) {
       console.error(
-        "POST /api/attempts/:attemptId/submit error:",
+        "Submit attempt error:",
         error
       );
 
@@ -1419,7 +1071,7 @@ router.post(
 );
 
 /* =========================================================
-   GET RESULT
+   GET STUDENT RESULT
    GET /api/attempts/:attemptId/result
 ========================================================= */
 
@@ -1431,25 +1083,45 @@ router.get(
     res: Response
   ) => {
     try {
-      const attemptId = getParam(
-        req.params.attemptId
-      );
+      const attemptId =
+        getParam(
+          req.params.attemptId
+        );
+
+      if (!isValidObjectId(attemptId)) {
+        return res.status(400).json({
+          message:
+            "Invalid attempt ID",
+        });
+      }
 
       const attempt =
-        await getOwnedAttempt(
-          attemptId,
-          req,
-          res
+        await Attempt.findById(
+          attemptId
         );
 
       if (!attempt) {
-        return;
+        return res.status(404).json({
+          message:
+            "Attempt not found",
+        });
+      }
+
+      if (
+        !req.user ||
+        req.user.userId !==
+          attempt.studentId.toString()
+      ) {
+        return res.status(403).json({
+          message:
+            "Access denied",
+        });
       }
 
       const exam =
         await Exam.findById(
           attempt.examId
-        ).lean();
+        );
 
       if (!exam) {
         return res.status(404).json({
@@ -1458,76 +1130,51 @@ router.get(
         });
       }
 
-      /*
-       * Automatically close an expired
-       * attempt before returning the result.
-       */
-      await closeExpiredAttempt(
-        attempt,
-        exam
-      );
-
-      const currentAttempt =
-        await Attempt.findById(
-          attempt._id
-        );
-
-      if (!currentAttempt) {
-        return res.status(404).json({
-          message:
-            "Attempt not found",
-        });
-      }
-
       if (
-        currentAttempt.status ===
+        attempt.status ===
         "IN_PROGRESS"
       ) {
-        return res.status(409).json({
-          message:
-            "Exam attempt has not been submitted yet",
-        });
+        const expired =
+          await closeExpiredAttempt(
+            attempt,
+            exam
+          );
+
+        if (!expired) {
+          return res.status(409).json({
+            message:
+              "Exam is still in progress",
+          });
+        }
       }
 
       const result =
-        await buildAttemptResult(
-          currentAttempt,
+        await calculateScore(
+          attempt,
           exam
         );
 
       return res.status(200).json({
         attempt: {
-          _id:
-            currentAttempt._id,
-
-          examId:
-            currentAttempt.examId,
-
+          _id: attempt._id,
           status:
-            currentAttempt.status,
-
+            attempt.status,
           startTime:
-            currentAttempt.startTime,
-
+            attempt.startTime,
           endTime:
-            currentAttempt.endTime,
-
+            attempt.endTime,
           submittedAt:
-            currentAttempt.submittedAt,
+            attempt.submittedAt,
+          tabSwitchCount:
+            attempt.tabSwitchCount,
         },
 
         exam: {
           _id: exam._id,
-
-          title:
-            exam.title,
-
-          subject:
-            exam.subject,
-
+          title: exam.title,
+          subject: exam.subject,
           totalMarks:
             exam.totalMarks,
-
           passingMarks:
             exam.passingMarks,
         },
@@ -1536,13 +1183,558 @@ router.get(
       });
     } catch (error) {
       console.error(
-        "GET /api/attempts/:attemptId/result error:",
+        "Get result error:",
         error
       );
 
       return res.status(500).json({
         message:
-          "Failed to load exam result",
+          "Failed to load result",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   INSTRUCTOR RESULTS
+   GET /api/attempts/exam/:examId/results
+========================================================= */
+
+router.get(
+  "/exam/:examId/results",
+  requireAuth,
+  async (
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    try {
+      const examId =
+        getParam(
+          req.params.examId
+        );
+
+      const exam =
+        await requireInstructorExamAccess(
+          req,
+          res,
+          examId
+        );
+
+      if (!exam) {
+        return;
+      }
+
+      /*
+       * First close all attempts whose
+       * server-side time has expired.
+       */
+      const activeAttempts =
+        await Attempt.find({
+          examId: exam._id,
+          status:
+            "IN_PROGRESS",
+        });
+
+      for (
+        const attempt of activeAttempts
+      ) {
+        if (
+          new Date() >=
+          new Date(
+            attempt.endTime
+          )
+        ) {
+          await closeExpiredAttempt(
+            attempt,
+            exam
+          );
+        }
+      }
+
+      /*
+       * Fetch the latest attempt data
+       * after updating expired attempts.
+       */
+      const attempts =
+        await Attempt.find({
+          examId: exam._id,
+        })
+          .populate(
+            "studentId",
+            "name email studentId degree yearOfStudy semester"
+          )
+          .sort({
+            createdAt: -1,
+          });
+
+      const formattedAttempts =
+        await Promise.all(
+          attempts.map(
+            async (
+              attempt: IAttempt
+            ) => {
+              const result =
+                await calculateScore(
+                  attempt,
+                  exam
+                );
+
+              return {
+                _id: attempt._id,
+
+                student:
+                  attempt.studentId,
+
+                examId:
+                  attempt.examId,
+
+                status:
+                  attempt.status,
+
+                score:
+                  attempt.score ??
+                  result.score,
+
+                totalMarks:
+                  attempt.totalMarks ??
+                  result.totalMarks,
+
+                percentage:
+                  attempt.percentage ??
+                  result.percentage,
+
+                passed:
+                  attempt.passed ??
+                  result.passed,
+
+                correctCount:
+                  result.correctCount,
+
+                incorrectCount:
+                  result.incorrectCount,
+
+                unansweredCount:
+                  result.unansweredCount,
+
+                startTime:
+                  attempt.startTime,
+
+                endTime:
+                  attempt.endTime,
+
+                submittedAt:
+                  attempt.submittedAt,
+
+                tabSwitchCount:
+                  attempt.tabSwitchCount,
+
+                createdAt:
+                  attempt.createdAt,
+
+                updatedAt:
+                  attempt.updatedAt,
+              };
+            }
+          )
+        );
+
+      return res.status(200).json({
+        exam: {
+          _id: exam._id,
+          title: exam.title,
+          subject: exam.subject,
+          degree: exam.degree,
+          yearOfStudy:
+            exam.yearOfStudy,
+          semester:
+            exam.semester,
+          duration:
+            exam.duration,
+          questionCount:
+            exam.questionCount,
+          totalMarks:
+            exam.totalMarks,
+          passingMarks:
+            exam.passingMarks,
+        },
+
+        attempts:
+          formattedAttempts,
+      });
+    } catch (error) {
+      console.error(
+        "Get instructor exam results error:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Failed to fetch exam results",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   INSTRUCTOR ATTEMPTS FALLBACK
+   GET /api/attempts/exam/:examId
+========================================================= */
+
+router.get(
+  "/exam/:examId",
+  requireAuth,
+  async (
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    try {
+      const examId =
+        getParam(
+          req.params.examId
+        );
+
+      const exam =
+        await requireInstructorExamAccess(
+          req,
+          res,
+          examId
+        );
+
+      if (!exam) {
+        return;
+      }
+
+      const attempts =
+        await Attempt.find({
+          examId: exam._id,
+        })
+          .populate(
+            "studentId",
+            "name email studentId degree yearOfStudy semester"
+          )
+          .sort({
+            createdAt: -1,
+          });
+
+      for (
+        const attempt of attempts
+      ) {
+        if (
+          attempt.status ===
+            "IN_PROGRESS" &&
+          new Date() >=
+            new Date(
+              attempt.endTime
+            )
+        ) {
+          await closeExpiredAttempt(
+            attempt,
+            exam
+          );
+        }
+      }
+
+      const updatedAttempts =
+        await Attempt.find({
+          examId: exam._id,
+        })
+          .populate(
+            "studentId",
+            "name email studentId degree yearOfStudy semester"
+          )
+          .sort({
+            createdAt: -1,
+          });
+
+      return res.status(200).json({
+        attempts:
+          updatedAttempts,
+      });
+    } catch (error) {
+      console.error(
+        "Get instructor attempts error:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Failed to fetch attempts",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   INSTRUCTOR ATTEMPT DETAILS
+   GET /api/attempts/instructor/:attemptId
+========================================================= */
+
+router.get(
+  "/instructor/:attemptId",
+  requireAuth,
+  async (
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          message:
+            "Authentication required",
+        });
+      }
+
+      if (
+        req.user.role !==
+        "instructor"
+      ) {
+        return res.status(403).json({
+          message:
+            "Instructor access required",
+        });
+      }
+
+      const attemptId =
+        getParam(
+          req.params.attemptId
+        );
+
+      if (!isValidObjectId(attemptId)) {
+        return res.status(400).json({
+          message:
+            "Invalid attempt ID",
+        });
+      }
+
+      const attempt =
+        await Attempt.findById(
+          attemptId
+        ).populate(
+          "studentId",
+          "name email studentId degree yearOfStudy semester phone city"
+        );
+
+      if (!attempt) {
+        return res.status(404).json({
+          message:
+            "Attempt not found",
+        });
+      }
+
+      const exam =
+        await Exam.findById(
+          attempt.examId
+        );
+
+      if (!exam) {
+        return res.status(404).json({
+          message:
+            "Exam not found",
+        });
+      }
+
+      if (
+        exam.createdBy.toString() !==
+        req.user.userId
+      ) {
+        return res.status(403).json({
+          message:
+            "You do not have access to this attempt",
+        });
+      }
+
+      await closeExpiredAttempt(
+        attempt,
+        exam
+      );
+
+      const questions: IQuestion[] =
+        await Question.find({
+          _id: {
+            $in: attempt.questionIds,
+          },
+        });
+
+      const questionMap =
+        new Map<
+          string,
+          IQuestion
+        >(
+          questions.map(
+            (
+              question: IQuestion
+            ) => [
+              question._id.toString(),
+              question,
+            ]
+          )
+        );
+
+      const answers =
+        (attempt.answers ||
+          {}) as AnswerMap;
+
+      const questionResults =
+        attempt.questionIds
+          .map(
+            (
+              questionId: mongoose.Types.ObjectId,
+              index: number
+            ) => {
+              const question =
+                questionMap.get(
+                  questionId.toString()
+                );
+
+              if (!question) {
+                return null;
+              }
+
+              const selectedAnswers =
+                normalizeAnswers(
+                  answers[
+                    questionId.toString()
+                  ]
+                );
+
+              const correctAnswers =
+                normalizeAnswers(
+                  question.correctAnswers
+                );
+
+              const unanswered =
+                selectedAnswers.length ===
+                0;
+
+              const correct =
+                !unanswered &&
+                sameAnswerSet(
+                  selectedAnswers,
+                  correctAnswers
+                );
+
+              return {
+                _id:
+                  question._id,
+
+                questionNumber:
+                  index + 1,
+
+                questionText:
+                  question.questionText,
+
+                type:
+                  question.type,
+
+                options:
+                  question.options,
+
+                selectedAnswers,
+
+                correctAnswers,
+
+                marks:
+                  question.marks,
+
+                difficulty:
+                  question.difficulty,
+
+                explanation:
+                  question.explanation,
+
+                isCorrect:
+                  correct,
+
+                isUnanswered:
+                  unanswered,
+              };
+            }
+          )
+          .filter(
+            (
+              question:
+                | {
+                    _id: mongoose.Types.ObjectId;
+                    questionNumber: number;
+                    questionText: string;
+                    type: string;
+                    options: string[];
+                    selectedAnswers: string[];
+                    correctAnswers: string[];
+                    marks: number;
+                    difficulty: string;
+                    explanation?: string;
+                    isCorrect: boolean;
+                    isUnanswered: boolean;
+                  }
+                | null
+            ): question is NonNullable<
+              typeof question
+            > =>
+              question !== null
+          );
+
+      const result =
+        await calculateScore(
+          attempt,
+          exam
+        );
+
+      return res.status(200).json({
+        attempt: {
+          _id: attempt._id,
+          status:
+            attempt.status,
+          startTime:
+            attempt.startTime,
+          endTime:
+            attempt.endTime,
+          submittedAt:
+            attempt.submittedAt,
+          tabSwitchCount:
+            attempt.tabSwitchCount,
+        },
+
+        student:
+          attempt.studentId,
+
+        exam: {
+          _id: exam._id,
+          title: exam.title,
+          subject: exam.subject,
+          degree: exam.degree,
+          yearOfStudy:
+            exam.yearOfStudy,
+          semester:
+            exam.semester,
+          duration:
+            exam.duration,
+          questionCount:
+            exam.questionCount,
+          totalMarks:
+            exam.totalMarks,
+          passingMarks:
+            exam.passingMarks,
+          negativeMarking:
+            exam.negativeMarking,
+          negativePenalty:
+            exam.negativePenalty,
+        },
+
+        result,
+
+        questions:
+          questionResults,
+      });
+    } catch (error) {
+      console.error(
+        "Get instructor attempt details error:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Failed to fetch attempt details",
       });
     }
   }

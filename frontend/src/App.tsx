@@ -1,28 +1,51 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+} from "react-router-dom";
 
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
+
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentProfile from "./pages/StudentProfile";
+
 import InstructorDashboard from "./pages/InstructorDashboard";
+import InstructorResults from "./pages/InstructorResults";
+import InstructorAttemptDetails from "./pages/InstructorAttemptDetails";
+
 import ExamPage from "./pages/ExamPage";
 import QuestionBank from "./pages/QuestionBank";
-import ExamForm from "./pages/ExamForm";
+
+import CreateExam from "./pages/CreateExam";
+ import EditExam from "./pages/EditExam"; 
+
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public */}
-        <Route path="/" element={<Login />} />
+
+        {/* =========================
+            PUBLIC ROUTES
+        ========================== */}
+
+        <Route
+          path="/"
+          element={<Login />}
+        />
 
         <Route
           path="/forgot-password"
           element={<ForgotPassword />}
         />
 
-        {/* Student */}
+
+        {/* =========================
+            STUDENT ROUTES
+        ========================== */}
+
         <Route
           path="/student"
           element={
@@ -50,7 +73,11 @@ function App() {
           }
         />
 
-        {/* Instructor */}
+
+        {/* =========================
+            INSTRUCTOR DASHBOARD
+        ========================== */}
+
         <Route
           path="/instructor"
           element={
@@ -60,23 +87,38 @@ function App() {
           }
         />
 
+
+        {/* =========================
+            CREATE EXAM
+        ========================== */}
+
         <Route
           path="/instructor/exams/create"
           element={
             <ProtectedRoute role="instructor">
-              <ExamForm />
+              <CreateExam />
             </ProtectedRoute>
           }
         />
 
-        <Route
+
+        {/* =========================
+            EDIT / MANAGE EXAM
+        ========================== */}
+
+         <Route
           path="/instructor/exams/:examId/edit"
           element={
             <ProtectedRoute role="instructor">
-              <ExamForm />
+              <EditExam />
             </ProtectedRoute>
           }
-        />
+        /> 
+
+
+        {/* =========================
+            QUESTION BANK
+        ========================== */}
 
         <Route
           path="/instructor/exams/:examId/questions"
@@ -87,8 +129,45 @@ function App() {
           }
         />
 
-        {/* Fallback */}
-        <Route path="*" element={<Login />} />
+
+        {/* =========================
+            EXAM RESULTS
+        ========================== */}
+
+        <Route
+          path="/instructor/exams/:examId/results"
+          element={
+            <ProtectedRoute role="instructor">
+              <InstructorResults />
+            </ProtectedRoute>
+          }
+        />
+
+
+        {/* =========================
+            INDIVIDUAL STUDENT
+            ATTEMPT DETAILS
+        ========================== */}
+
+        <Route
+          path="/instructor/attempts/:attemptId"
+          element={
+            <ProtectedRoute role="instructor">
+              <InstructorAttemptDetails />
+            </ProtectedRoute>
+          }
+        />
+
+
+        {/* =========================
+            FALLBACK
+        ========================== */}
+
+        <Route
+          path="*"
+          element={<Login />}
+        />
+
       </Routes>
     </BrowserRouter>
   );
