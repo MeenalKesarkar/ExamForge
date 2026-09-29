@@ -1,4 +1,8 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import type {
+  FormEvent,
+  ReactNode,
+} from "react";
 
 import {
   AlertCircle,
@@ -7,386 +11,1511 @@ import {
   Eye,
   EyeOff,
   GraduationCap,
-  Loader2,
   Lock,
   Mail,
   ShieldCheck,
   Sparkles,
-  Zap,
 } from "lucide-react";
+
+import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
-import { useAppDispatch } from "../redux/hooks";
-import { login } from "../redux/slices/authSlice";
-import { loginUser } from "../services/authService";
+import {
+  loginUser,
+} from "../services/authService";
 
-function Login() {
-  const navigate = useNavigate();
-  const dispatch = useAppDispatch();
+// ======================================================
+// LOGIN PAGE
+// ======================================================
 
-  const [email, setEmail] = useState(() => {
-    return localStorage.getItem("examforge_remembered_email") || "";
-  });
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(() => {
-    return Boolean(localStorage.getItem("examforge_remembered_email"));
-  });
+export default function Login() {
+  const navigate =
+    useNavigate();
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const dispatch =
+    useDispatch();
 
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEmail(e.target.value);
-    if (error) setError("");
-  };
+  // ====================================================
+  // FORM STATE
+  // ====================================================
 
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPassword(e.target.value);
-    if (error) setError("");
-  };
+  const [
+    email,
+    setEmail,
+  ] = useState("");
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const [
+    password,
+    setPassword,
+  ] = useState("");
+
+  const [
+    rememberMe,
+    setRememberMe,
+  ] = useState(false);
+
+  const [
+    showPassword,
+    setShowPassword,
+  ] = useState(false);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const [
+    error,
+    setError,
+  ] = useState("");
+
+  // ====================================================
+  // LOGIN
+  // ====================================================
+
+  const handleSubmit = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
+
     setError("");
 
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail || !password) {
-      setError("Please enter both your email and password.");
+    const normalizedEmail =
+      email
+        .trim()
+        .toLowerCase();
+
+    // --------------------------------------------------
+    // Required field validation
+    // --------------------------------------------------
+
+    if (
+      !normalizedEmail ||
+      !password
+    ) {
+      setError(
+        "Email and password are required."
+      );
+
+      return;
+    }
+
+    // --------------------------------------------------
+    // Email validation
+    // --------------------------------------------------
+
+    const emailPattern =
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (
+      !emailPattern.test(
+        normalizedEmail
+      )
+    ) {
+      setError(
+        "Please enter a valid email address."
+      );
+
       return;
     }
 
     try {
       setLoading(true);
 
-      const data = await loginUser({
-        email: trimmedEmail.toLowerCase(),
-        password,
+      // ------------------------------------------------
+      // BACKEND LOGIN
+      // ------------------------------------------------
+
+      const result =
+        await loginUser({
+          email:
+            normalizedEmail,
+
+          password,
+
+          rememberMe,
+        });
+
+      // ------------------------------------------------
+      // STORE USER IN REDUX
+      // ------------------------------------------------
+      //
+      // We intentionally don't import your hooks.ts
+      // or authSlice.ts here because those paths are
+      // currently causing the TypeScript errors shown
+      // in your screenshot.
+      //
+      // Your auth reducer already listens to:
+      //
+      // auth/login
+      //
+      // ------------------------------------------------
+
+      dispatch({
+        type: "auth/login",
+
+        payload: {
+          user:
+            result.user,
+        },
       });
 
-      // Save or clear remembered email
-      if (rememberMe) {
-        localStorage.setItem("examforge_remembered_email", trimmedEmail);
+      // ------------------------------------------------
+      // REDIRECT BASED ON ROLE
+      // ------------------------------------------------
+
+      if (
+        result.user.role ===
+        "student"
+      ) {
+        navigate(
+          "/student",
+          {
+            replace: true,
+          }
+        );
+      } else if (
+        result.user.role ===
+        "instructor"
+      ) {
+        navigate(
+          "/instructor",
+          {
+            replace: true,
+          }
+        );
       } else {
-        localStorage.removeItem("examforge_remembered_email");
-      }
-
-      // Store user + JWT in Redux
-      dispatch(
-        login({
-          user: data.user,
-          token: data.token,
-        })
-      );
-
-      // Redirect according to role
-      if (data.user.role === "student") {
-        navigate("/student");
-      } else if (data.user.role === "instructor") {
-        navigate("/instructor");
+        setError(
+          "Your account has an invalid role."
+        );
       }
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Unable to sign in. Please check your credentials and try again.");
-      }
+      // ------------------------------------------------
+      // ERROR HANDLING
+      // ------------------------------------------------
+
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Unable to sign in. Please try again.";
+
+      setError(
+        message
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  // ====================================================
+  // FORGOT PASSWORD
+  // ====================================================
+
+  const handleForgotPassword =
+    () => {
+      navigate(
+        "/forgot-password"
+      );
+    };
+
+  // ====================================================
+  // RENDER
+  // ====================================================
+
   return (
-    <div className="relative min-h-screen bg-slate-950 flex items-center justify-center p-4 sm:p-6 lg:p-10 overflow-hidden selection:bg-indigo-500 selection:text-white">
-      {/* Ambient background glow effects */}
+    <main
+      className="
+        min-h-screen
+        w-full
+        overflow-x-hidden
+        bg-[#05091f]
+      "
+    >
+
       <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-indigo-600/20 blur-[128px]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-purple-600/20 blur-[128px]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[520px] w-[520px] rounded-full bg-blue-500/10 blur-[140px]"
-      />
+        className="
+          min-h-screen
+          w-full
+        "
+      >
 
-      {/* Decorative technical grid */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:24px_24px] opacity-25 [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)]"
-      />
+        <div
+          className="
+            mx-auto
+            flex
+            min-h-screen
+            w-full
+            max-w-[1600px]
+            flex-col
+            lg:flex-row
+          "
+        >
 
-      {/* Main Glassmorphic Card Container */}
-      <div className="relative z-10 w-full max-w-5xl min-h-[560px] grid lg:grid-cols-12 overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-900/70 shadow-[0_25px_70px_rgba(0,0,0,0.65)] backdrop-blur-xl">
-        
-        {/* Left Side: Brand Showcase (5 cols on lg) */}
-        <div className="hidden lg:flex lg:col-span-5 relative overflow-hidden bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 p-10 text-white flex-col justify-between">
-          {/* Subtle decorative circles and ambient overlays */}
-          <div
-            aria-hidden="true"
-            className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-white/10 blur-xl"
-          />
-          <div
-            aria-hidden="true"
-            className="absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-purple-400/20 blur-2xl"
-          />
+          {/* =================================================
+              LEFT BRAND PANEL
+              ================================================= */}
 
-          {/* Brand Header */}
-          <div className="relative z-10">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 shadow-inner">
-                <Sparkles size={22} className="text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                  ExamForge
-                  <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-white/20 tracking-wider">
-                    v1.0
-                  </span>
-                </h1>
-                <p className="text-xs text-indigo-100/80">Next-Gen Assessment Cloud</p>
-              </div>
-            </div>
-          </div>
+          <section
+            className="
+              relative
+              hidden
+              min-h-screen
+              w-full
+              overflow-hidden
+              bg-gradient-to-br
+              from-[#15104f]
+              via-[#24117c]
+              to-[#6d16df]
+              lg:flex
+              lg:w-[46%]
+              xl:w-[48%]
+            "
+          >
 
-          {/* Central Hero Pitch & Feature Badges */}
-          <div className="relative z-10 my-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold tracking-wide text-indigo-100 mb-4">
-              <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              TEST • LEARN • ACHIEVE
-            </div>
+            {/* Background glow */}
 
-            <h2 className="text-3xl xl:text-4xl font-extrabold tracking-tight leading-tight text-white mb-4">
-              Forge knowledge. <br />
-              <span className="text-indigo-200">Master every exam.</span>
-            </h2>
+            <div
+              className="
+                absolute
+                -left-32
+                -top-32
+                h-96
+                w-96
+                rounded-full
+                bg-purple-500/20
+                blur-3xl
+              "
+            />
 
-            <p className="text-sm text-indigo-100/90 leading-relaxed mb-8">
-              A tamper-proof, intelligent exam ecosystem built for seamless evaluations, deep analytics, and role-based test workflows.
-            </p>
+            <div
+              className="
+                absolute
+                -bottom-40
+                -right-40
+                h-[500px]
+                w-[500px]
+                rounded-full
+                bg-fuchsia-500/20
+                blur-3xl
+              "
+            />
 
-            {/* Feature Micro-Cards */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 transition hover:bg-white/15">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white">
-                  <ShieldCheck size={18} />
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-white">AI-Assisted Proctoring</h3>
-                  <p className="text-[11px] text-indigo-100/80">Secure browser locks & tamper detection</p>
-                </div>
-              </div>
+            {/* Decorative circles */}
 
-              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 transition hover:bg-white/15">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white">
-                  <Zap size={18} />
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-white">Real-Time Evaluation</h3>
-                  <p className="text-[11px] text-indigo-100/80">Instant scoring & comprehensive rank reports</p>
-                </div>
-              </div>
+            <div
+              className="
+                absolute
+                right-10
+                top-24
+                h-24
+                w-24
+                rounded-full
+                border
+                border-white/10
+              "
+            />
 
-              <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 transition hover:bg-white/15">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white">
-                  <GraduationCap size={18} />
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-white">Dedicated Role Portals</h3>
-                  <p className="text-[11px] text-indigo-100/80">Tailored tools for students & instructors</p>
-                </div>
-              </div>
-            </div>
-          </div>
+            <div
+              className="
+                absolute
+                bottom-32
+                left-12
+                h-16
+                w-16
+                rounded-full
+                border
+                border-white/10
+              "
+            />
 
-          {/* Trust Banner / Social Proof */}
-          <div className="relative z-10 pt-4 border-t border-white/15 flex items-center justify-between text-xs text-indigo-100">
-            <span className="flex items-center gap-1.5 font-medium">
-              <CheckCircle2 size={15} className="text-emerald-300" />
-              99.9% Platform Integrity
-            </span>
-            <span className="text-indigo-200/80">256-Bit SSL Encrypted</span>
-          </div>
-        </div>
+            {/* Left content */}
 
-        {/* Right Side: Authentication Form (7 cols on lg) */}
-        <div className="lg:col-span-7 bg-white p-6 sm:p-10 flex flex-col justify-center">
-          <div className="w-full max-w-md mx-auto">
+            <div
+              className="
+                relative
+                z-10
+                flex
+                min-h-screen
+                w-full
+                flex-col
+                justify-between
+                px-8
+                py-10
+                sm:px-10
+                lg:px-10
+                xl:px-14
+                2xl:px-16
+              "
+            >
 
-            {/* Mobile Header */}
-            <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/30">
-                <Sparkles size={22} />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-slate-900">ExamForge</h1>
-                <p className="text-xs text-slate-500">Online Exam Platform</p>
-              </div>
-            </div>
+              {/* =================================================
+                  BRAND
+                  ================================================= */}
 
-            {/* Form Title & Subtitle */}
-            <div className="mb-6">
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-                Welcome back 👋
-              </h2>
-              <p className="mt-1.5 text-sm text-slate-500">
-                Sign in to continue to your ExamForge portal.
-              </p>
-            </div>
-
-
-            {/* Error Message with Icon */}
-            {error && (
               <div
-                role="alert"
-                className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50/90 p-3.5 text-sm text-red-700 animate-in fade-in"
+                className="
+                  flex
+                  items-center
+                  gap-3
+                "
               >
-                <AlertCircle size={18} className="mt-0.5 shrink-0 text-red-600" />
-                <div className="flex-1 font-medium leading-snug">{error}</div>
-              </div>
-            )}
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-              
-              {/* Email Field */}
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5"
+                <div
+                  className="
+                    flex
+                    h-12
+                    w-12
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-2xl
+                    bg-white/15
+                    ring-1
+                    ring-white/20
+                    backdrop-blur-sm
+                  "
                 >
-                  Email Address
-                </label>
-
-                <div className="relative group">
-                  <Mail
-                    size={18}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors pointer-events-none"
-                  />
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    spellCheck="false"
-                    value={email}
-                    onChange={handleEmailChange}
-                    placeholder="name@institution.edu"
-                    required
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-3 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15"
+                  <Sparkles
+                    className="
+                      h-6
+                      w-6
+                      text-white
+                    "
                   />
                 </div>
-              </div>
 
-              {/* Password Field */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label
-                    htmlFor="password"
-                    className="block text-xs font-semibold uppercase tracking-wider text-slate-700"
+                <div>
+
+                  <div
+                    className="
+                      flex
+                      items-center
+                      gap-2
+                    "
                   >
-                    Password
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      alert("Please contact your exam coordinator or institute administrator to reset your password.");
-                    }}
-                    className="text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline transition cursor-pointer"
+
+                    <h1
+                      className="
+                        text-xl
+                        font-bold
+                        tracking-tight
+                        text-white
+                      "
+                    >
+                      ExamForge
+                    </h1>
+
+                    <span
+                      className="
+                        rounded-full
+                        bg-white/15
+                        px-2
+                        py-0.5
+                        text-[10px]
+                        font-semibold
+                        text-white/90
+                        ring-1
+                        ring-white/15
+                      "
+                    >
+                      V1.0
+                    </span>
+
+                  </div>
+
+                  <p
+                    className="
+                      mt-0.5
+                      text-xs
+                      text-white/60
+                    "
                   >
-                    Forgot password?
-                  </button>
+                    Academic Assessment Platform
+                  </p>
+
                 </div>
 
-                <div className="relative group">
-                  <Lock
-                    size={18}
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors pointer-events-none"
-                  />
-                  <input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={handlePasswordChange}
-                    placeholder="Enter your password"
-                    required
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-3 pl-10 pr-11 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/50 transition cursor-pointer"
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
               </div>
 
-              {/* Remember Me Checkbox */}
-              <div className="flex items-center justify-between pt-1">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 accent-indigo-600 cursor-pointer"
-                  />
-                  <span className="text-xs font-medium text-slate-600">
-                    Remember my email
-                  </span>
-                </label>
-              </div>
+              {/* =================================================
+                  HERO
+                  ================================================= */}
 
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 py-3.5 px-6 font-semibold text-sm text-white shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/40 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200 cursor-pointer"
+              <div
+                className="
+                  max-w-xl
+                  py-12
+                "
               >
-                {loading ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    <span>Signing in...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Sign In to Account</span>
-                    <ArrowRight size={16} />
-                  </>
-                )}
-              </button>
-            </form>
 
-            {/* Help / Institutional Registration Notice */}
-            <div className="mt-5 pt-4 border-t border-slate-100 text-center">
-              <p className="text-xs text-slate-500">
-                Don't have an institutional account?{" "}
-                <span className="font-semibold text-slate-700">
-                  Contact your instructor or campus admin.
-                </span>
-              </p>
-            </div>
+                <div
+                  className="
+                    mb-5
+                    inline-flex
+                    items-center
+                    gap-2
+                    rounded-full
+                    border
+                    border-white/15
+                    bg-white/10
+                    px-4
+                    py-2
+                    text-xs
+                    font-semibold
+                    uppercase
+                    tracking-wide
+                    text-white/90
+                    backdrop-blur-sm
+                  "
+                >
 
-            {/* Footer Bottom Credentials / Security Notice */}
-            <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400">
-              <div className="flex items-center gap-1.5">
-                <Lock size={12} className="text-emerald-500" />
-                <span>TLS 256-bit encrypted session</span>
+                  <GraduationCap
+                    className="
+                      h-4
+                      w-4
+                    "
+                  />
+
+                  BCA Student Assessment
+
+                </div>
+
+                <h2
+                  className="
+                    text-4xl
+                    font-extrabold
+                    leading-[1.08]
+                    tracking-tight
+                    text-white
+                    xl:text-5xl
+                    2xl:text-6xl
+                  "
+                >
+                  Test.
+                  <br />
+
+                  <span
+                    className="
+                      bg-gradient-to-r
+                      from-white
+                      via-purple-100
+                      to-fuchsia-200
+                      bg-clip-text
+                      text-transparent
+                    "
+                  >
+                    Learn.
+                  </span>
+
+                  <br />
+
+                  Achieve.
+                </h2>
+
+                <p
+                  className="
+                    mt-6
+                    max-w-lg
+                    text-sm
+                    leading-7
+                    text-white/65
+                    xl:text-base
+                  "
+                >
+                  A focused assessment platform
+                  designed for BCA students to
+                  practice, evaluate their knowledge,
+                  and track their academic progress.
+                </p>
+
+                {/* =================================================
+                    FEATURE CARDS
+                    ================================================= */}
+
+                <div
+                  className="
+                    mt-9
+                    space-y-3
+                  "
+                >
+
+                  <FeatureCard
+                    icon={
+                      <ShieldCheck
+                        className="
+                          h-5
+                          w-5
+                        "
+                      />
+                    }
+                    title="Secure Assessments"
+                    description="Protected student and instructor portals."
+                  />
+
+                  <FeatureCard
+                    icon={
+                      <CheckCircle2
+                        className="
+                          h-5
+                          w-5
+                        "
+                      />
+                    }
+                    title="Real-Time Evaluation"
+                    description="Instant scoring and detailed results."
+                  />
+
+                  <FeatureCard
+                    icon={
+                      <GraduationCap
+                        className="
+                          h-5
+                          w-5
+                        "
+                      />
+                    }
+                    title="Dedicated Role Portals"
+                    description="Personalized experiences for students and instructors."
+                  />
+
+                </div>
+
               </div>
-              <p>© {new Date().getFullYear()} ExamForge. All rights reserved.</p>
+
+              {/* =================================================
+                  LEFT FOOTER
+                  ================================================= */}
+
+              <div
+                className="
+                  text-xs
+                  text-white/40
+                "
+              >
+                © 2026 ExamForge
+                <span className="mx-2">
+                  •
+                </span>
+                Built for academic excellence.
+              </div>
+
             </div>
 
-          </div>
+          </section>
+
+          {/* =================================================
+              RIGHT LOGIN PANEL
+              ================================================= */}
+
+          <section
+            className="
+              flex
+              min-h-screen
+              w-full
+              items-center
+              justify-center
+              bg-white
+              px-4
+              py-8
+              sm:px-6
+              sm:py-10
+              md:px-8
+              lg:w-[54%]
+              lg:px-10
+              xl:w-[52%]
+              xl:px-14
+            "
+          >
+
+            <div
+              className="
+                w-full
+                max-w-[520px]
+              "
+            >
+
+              {/* =================================================
+                  MOBILE BRAND
+                  ================================================= */}
+
+              <div
+                className="
+                  mb-8
+                  flex
+                  items-center
+                  justify-center
+                  lg:hidden
+                "
+              >
+
+                <div
+                  className="
+                    flex
+                    items-center
+                    gap-3
+                  "
+                >
+
+                  <div
+                    className="
+                      flex
+                      h-12
+                      w-12
+                      shrink-0
+                      items-center
+                      justify-center
+                      rounded-2xl
+                      bg-gradient-to-br
+                      from-[#4f39ff]
+                      to-[#a20cff]
+                      shadow-lg
+                      shadow-purple-500/25
+                    "
+                  >
+                    <Sparkles
+                      className="
+                        h-6
+                        w-6
+                        text-white
+                      "
+                    />
+                  </div>
+
+                  <div>
+
+                    <h1
+                      className="
+                        text-xl
+                        font-bold
+                        tracking-tight
+                        text-[#111936]
+                      "
+                    >
+                      ExamForge
+                    </h1>
+
+                    <p
+                      className="
+                        text-xs
+                        text-slate-500
+                      "
+                    >
+                      Online Exam Platform
+                    </p>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* =================================================
+                  LOGIN CARD
+                  ================================================= */}
+
+              <div
+                className="
+                  overflow-hidden
+                  rounded-[24px]
+                  border
+                  border-slate-200
+                  bg-white
+                  shadow-[0_20px_70px_rgba(17,25,54,0.10)]
+                "
+              >
+
+                {/* Top gradient */}
+
+                <div
+                  className="
+                    h-1.5
+                    w-full
+                    bg-gradient-to-r
+                    from-[#4f39ff]
+                    via-[#6937ff]
+                    to-[#b10cff]
+                  "
+                />
+
+                <div
+                  className="
+                    p-5
+                    sm:p-7
+                    md:p-9
+                    lg:p-10
+                  "
+                >
+
+                  {/* =================================================
+                      PORTAL LABEL
+                      ================================================= */}
+
+                  <div
+                    className="
+                      mb-6
+                      inline-flex
+                      max-w-full
+                      items-center
+                      gap-2
+                      rounded-xl
+                      bg-[#f0efff]
+                      px-3
+                      py-2
+                      text-sm
+                      font-semibold
+                      text-[#4f39ff]
+                    "
+                  >
+
+                    <GraduationCap
+                      className="
+                        h-4
+                        w-4
+                        shrink-0
+                      "
+                    />
+
+                    <span>
+                      BCA Assessment Portal
+                    </span>
+
+                  </div>
+
+                  {/* =================================================
+                      HEADING
+                      ================================================= */}
+
+                  <div>
+
+                    <h2
+                      className="
+                        text-3xl
+                        font-extrabold
+                        tracking-tight
+                        text-[#111936]
+                        sm:text-[34px]
+                      "
+                    >
+                      Welcome back{" "}
+                      <span>
+                        👋
+                      </span>
+                    </h2>
+
+                    <p
+                      className="
+                        mt-2
+                        text-sm
+                        leading-6
+                        text-slate-500
+                        sm:text-base
+                      "
+                    >
+                      Sign in to access your
+                      academic assessment
+                      dashboard.
+                    </p>
+
+                  </div>
+
+                  {/* =================================================
+                      ERROR
+                      ================================================= */}
+
+                  {error && (
+                    <div
+                      className="
+                        mt-6
+                        flex
+                        items-start
+                        gap-3
+                        rounded-xl
+                        border
+                        border-red-200
+                        bg-red-50
+                        px-4
+                        py-3.5
+                        text-sm
+                        text-red-700
+                      "
+                      role="alert"
+                    >
+
+                      <AlertCircle
+                        className="
+                          mt-0.5
+                          h-5
+                          w-5
+                          shrink-0
+                          text-red-600
+                        "
+                      />
+
+                      <span
+                        className="
+                          min-w-0
+                          break-words
+                          leading-5
+                        "
+                      >
+                        {error}
+                      </span>
+
+                    </div>
+                  )}
+
+                  {/* =================================================
+                      FORM
+                      ================================================= */}
+
+                  <form
+                    onSubmit={
+                      handleSubmit
+                    }
+                    className="
+                      mt-7
+                      space-y-5
+                    "
+                  >
+
+                    {/* =================================================
+                        EMAIL
+                        ================================================= */}
+
+                    <div>
+
+                      <label
+                        htmlFor="email"
+                        className="
+                          mb-2
+                          block
+                          text-sm
+                          font-semibold
+                          text-slate-700
+                        "
+                      >
+                        Email address
+                      </label>
+
+                      <div
+                        className="
+                          relative
+                        "
+                      >
+
+                        <Mail
+                          className="
+                            pointer-events-none
+                            absolute
+                            left-4
+                            top-1/2
+                            h-5
+                            w-5
+                            -translate-y-1/2
+                            text-slate-400
+                          "
+                        />
+
+                        <input
+                          id="email"
+                          name="email"
+                          type="email"
+                          autoComplete="email"
+                          value={email}
+                          onChange={(
+                            event
+                          ) =>
+                            setEmail(
+                              event.target.value
+                            )
+                          }
+                          placeholder="you@example.com"
+                          disabled={
+                            loading
+                          }
+                          className="
+                            h-14
+                            w-full
+                            min-w-0
+                            rounded-xl
+                            border
+                            border-slate-200
+                            bg-slate-50
+                            pl-12
+                            pr-4
+                            text-sm
+                            text-slate-900
+                            outline-none
+                            transition
+                            placeholder:text-slate-400
+                            focus:border-[#6347ff]
+                            focus:bg-white
+                            focus:ring-4
+                            focus:ring-[#6347ff]/10
+                            disabled:cursor-not-allowed
+                            disabled:opacity-60
+                          "
+                        />
+
+                      </div>
+
+                    </div>
+
+                    {/* =================================================
+                        PASSWORD
+                        ================================================= */}
+
+                    <div>
+
+                      <div
+                        className="
+                          mb-2
+                          flex
+                          flex-wrap
+                          items-center
+                          justify-between
+                          gap-2
+                        "
+                      >
+
+                        <label
+                          htmlFor="password"
+                          className="
+                            text-sm
+                            font-semibold
+                            text-slate-700
+                          "
+                        >
+                          Password
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={
+                            handleForgotPassword
+                          }
+                          className="
+                            shrink-0
+                            text-sm
+                            font-semibold
+                            text-[#5138ff]
+                            transition
+                            hover:text-[#8b16f5]
+                            hover:underline
+                          "
+                        >
+                          Forgot password?
+                        </button>
+
+                      </div>
+
+                      <div
+                        className="
+                          relative
+                        "
+                      >
+
+                        <Lock
+                          className="
+                            pointer-events-none
+                            absolute
+                            left-4
+                            top-1/2
+                            h-5
+                            w-5
+                            -translate-y-1/2
+                            text-slate-400
+                          "
+                        />
+
+                        <input
+                          id="password"
+                          name="password"
+                          type={
+                            showPassword
+                              ? "text"
+                              : "password"
+                          }
+                          autoComplete="current-password"
+                          value={password}
+                          onChange={(
+                            event
+                          ) =>
+                            setPassword(
+                              event.target.value
+                            )
+                          }
+                          placeholder="Enter your password"
+                          disabled={
+                            loading
+                          }
+                          className="
+                            h-14
+                            w-full
+                            min-w-0
+                            rounded-xl
+                            border
+                            border-slate-200
+                            bg-slate-50
+                            pl-12
+                            pr-12
+                            text-sm
+                            text-slate-900
+                            outline-none
+                            transition
+                            placeholder:text-slate-400
+                            focus:border-[#6347ff]
+                            focus:bg-white
+                            focus:ring-4
+                            focus:ring-[#6347ff]/10
+                            disabled:cursor-not-allowed
+                            disabled:opacity-60
+                          "
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowPassword(
+                              (
+                                current
+                              ) =>
+                                !current
+                            )
+                          }
+                          disabled={
+                            loading
+                          }
+                          aria-label={
+                            showPassword
+                              ? "Hide password"
+                              : "Show password"
+                          }
+                          className="
+                            absolute
+                            right-2
+                            top-1/2
+                            flex
+                            h-10
+                            w-10
+                            -translate-y-1/2
+                            items-center
+                            justify-center
+                            rounded-lg
+                            text-slate-400
+                            transition
+                            hover:bg-slate-100
+                            hover:text-slate-600
+                          "
+                        >
+
+                          {showPassword ? (
+                            <EyeOff
+                              className="
+                                h-5
+                                w-5
+                              "
+                            />
+                          ) : (
+                            <Eye
+                              className="
+                                h-5
+                                w-5
+                              "
+                            />
+                          )}
+
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                    {/* =================================================
+                        REMEMBER ME
+                        ================================================= */}
+
+                    <label
+                      className="
+                        flex
+                        cursor-pointer
+                        items-center
+                        gap-3
+                        select-none
+                      "
+                    >
+
+                      <input
+                        type="checkbox"
+                        checked={
+                          rememberMe
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setRememberMe(
+                            event.target.checked
+                          )
+                        }
+                        disabled={
+                          loading
+                        }
+                        className="
+                          h-5
+                          w-5
+                          shrink-0
+                          cursor-pointer
+                          rounded
+                          border-slate-300
+                          accent-[#5b3df5]
+                        "
+                      />
+
+                      <span
+                        className="
+                          text-sm
+                          font-medium
+                          text-slate-600
+                        "
+                      >
+                        Remember me
+                      </span>
+
+                    </label>
+
+                    {/* =================================================
+                        LOGIN BUTTON
+                        ================================================= */}
+
+                    <button
+                      type="submit"
+                      disabled={
+                        loading
+                      }
+                      className="
+                        group
+                        flex
+                        h-14
+                        w-full
+                        items-center
+                        justify-center
+                        gap-2
+                        rounded-xl
+                        bg-gradient-to-r
+                        from-[#4c39f5]
+                        via-[#6534f7]
+                        to-[#a20cff]
+                        px-5
+                        text-sm
+                        font-bold
+                        text-white
+                        shadow-lg
+                        shadow-purple-500/20
+                        transition
+                        duration-200
+                        hover:-translate-y-0.5
+                        hover:shadow-xl
+                        hover:shadow-purple-500/25
+                        focus:outline-none
+                        focus:ring-4
+                        focus:ring-purple-500/20
+                        disabled:cursor-not-allowed
+                        disabled:opacity-70
+                        disabled:hover:translate-y-0
+                      "
+                    >
+
+                      {loading ? (
+                        <>
+                          <span
+                            className="
+                              h-5
+                              w-5
+                              animate-spin
+                              rounded-full
+                              border-2
+                              border-white/30
+                              border-t-white
+                            "
+                          />
+
+                          Signing in...
+                        </>
+                      ) : (
+                        <>
+                          <span>
+                            Continue to ExamForge
+                          </span>
+
+                          <ArrowRight
+                            className="
+                              h-5
+                              w-5
+                              shrink-0
+                              transition
+                              duration-200
+                              group-hover:translate-x-1
+                            "
+                          />
+                        </>
+                      )}
+
+                    </button>
+
+                  </form>
+
+                  {/* =================================================
+                      INSTITUTIONAL ACCESS
+                      ================================================= */}
+
+                  <div
+                    className="
+                      mt-7
+                      rounded-2xl
+                      border
+                      border-slate-200
+                      bg-slate-50
+                      p-4
+                    "
+                  >
+
+                    <div
+                      className="
+                        flex
+                        items-start
+                        gap-3
+                      "
+                    >
+
+                      <div
+                        className="
+                          flex
+                          h-9
+                          w-9
+                          shrink-0
+                          items-center
+                          justify-center
+                          rounded-full
+                          bg-white
+                          shadow-sm
+                          ring-1
+                          ring-slate-200
+                        "
+                      >
+                        <CheckCircle2
+                          className="
+                            h-5
+                            w-5
+                            text-emerald-500
+                          "
+                        />
+                      </div>
+
+                      <div
+                        className="
+                          min-w-0
+                        "
+                      >
+
+                        <p
+                          className="
+                            text-sm
+                            font-semibold
+                            text-slate-700
+                          "
+                        >
+                          Institutional access only
+                        </p>
+
+                        <p
+                          className="
+                            mt-1
+                            text-xs
+                            leading-5
+                            text-slate-500
+                          "
+                        >
+                          Student accounts are
+                          created and approved by
+                          your instructor or campus
+                          administrator.
+                        </p>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  {/* =================================================
+                      SECURITY FOOTER
+                      ================================================= */}
+
+                  <div
+                    className="
+                      mt-6
+                      flex
+                      flex-wrap
+                      items-center
+                      justify-center
+                      gap-x-5
+                      gap-y-2
+                      text-xs
+                      text-slate-400
+                    "
+                  >
+
+                    <span
+                      className="
+                        inline-flex
+                        items-center
+                        gap-1.5
+                      "
+                    >
+
+                      <ShieldCheck
+                        className="
+                          h-4
+                          w-4
+                          text-emerald-500
+                        "
+                      />
+
+                      Secure HttpOnly session
+
+                    </span>
+
+                    <span
+                      className="
+                        hidden
+                        h-1
+                        w-1
+                        rounded-full
+                        bg-slate-300
+                        sm:block
+                      "
+                    />
+
+                    <span>
+                      © 2026 ExamForge
+                    </span>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* =================================================
+                  MOBILE FOOTER
+                  ================================================= */}
+
+              <p
+                className="
+                  mt-6
+                  text-center
+                  text-xs
+                  leading-5
+                  text-slate-400
+                  lg:hidden
+                "
+              >
+                Secure academic assessment
+                platform for BCA students.
+              </p>
+
+            </div>
+
+          </section>
+
         </div>
 
       </div>
-    </div>
+
+    </main>
   );
 }
 
-export default Login;
+// ======================================================
+// FEATURE CARD
+// ======================================================
+
+interface FeatureCardProps {
+  icon: ReactNode;
+  title: string;
+  description: string;
+}
+
+function FeatureCard({
+  icon,
+  title,
+  description,
+}: FeatureCardProps) {
+  return (
+    <div
+      className="
+        flex
+        items-center
+        gap-4
+        rounded-2xl
+        border
+        border-white/10
+        bg-white/10
+        px-4
+        py-3.5
+        backdrop-blur-md
+        transition
+        hover:bg-white/15
+      "
+    >
+
+      <div
+        className="
+          flex
+          h-10
+          w-10
+          shrink-0
+          items-center
+          justify-center
+          rounded-xl
+          bg-white/10
+          text-white
+          ring-1
+          ring-white/10
+        "
+      >
+        {icon}
+      </div>
+
+      <div
+        className="
+          min-w-0
+        "
+      >
+
+        <p
+          className="
+            text-sm
+            font-semibold
+            text-white
+          "
+        >
+          {title}
+        </p>
+
+        <p
+          className="
+            mt-0.5
+            text-xs
+            leading-5
+            text-white/55
+          "
+        >
+          {description}
+        </p>
+
+      </div>
+
+    </div>
+  );
+}

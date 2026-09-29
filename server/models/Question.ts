@@ -1,11 +1,26 @@
-const mongoose = require("mongoose");
+import mongoose, { Schema, Document } from "mongoose";
 
-const questionSchema = new mongoose.Schema(
+export interface IQuestion extends Document {
+  examId: mongoose.Types.ObjectId;
+  questionText: string;
+  type: "single" | "multi";
+  options: string[];
+  correctAnswers: string[];
+  marks: number;
+  explanation: string;
+  difficulty: "easy" | "medium" | "hard";
+  order: number;
+}
+
+const questionSchema = new Schema<IQuestion>(
   {
     examId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "Exam",
-      required: [true, "Exam reference (examId) is required"],
+      required: [
+        true,
+        "Exam reference (examId) is required",
+      ],
       index: true,
     },
 
@@ -17,10 +32,7 @@ const questionSchema = new mongoose.Schema(
 
     type: {
       type: String,
-      enum: {
-        values: ["single", "multi"],
-        message: "Question type must be either 'single' or 'multi'",
-      },
+      enum: ["single", "multi"],
       default: "single",
     },
 
@@ -28,7 +40,8 @@ const questionSchema = new mongoose.Schema(
       type: [String],
       required: [true, "Options are required"],
       validate: [
-        (val) => Array.isArray(val) && val.length >= 2,
+        (value: string[]) =>
+          Array.isArray(value) && value.length >= 2,
         "A question must have at least 2 options",
       ],
     },
@@ -37,7 +50,8 @@ const questionSchema = new mongoose.Schema(
       type: [String],
       required: [true, "Correct answer(s) required"],
       validate: [
-        (val) => Array.isArray(val) && val.length >= 1,
+        (value: string[]) =>
+          Array.isArray(value) && value.length >= 1,
         "A question must have at least 1 correct answer",
       ],
     },
@@ -71,9 +85,14 @@ const questionSchema = new mongoose.Schema(
   }
 );
 
-// High performance compound index
-questionSchema.index({ examId: 1, order: 1 });
+questionSchema.index({
+  examId: 1,
+  order: 1,
+});
 
-const Question = mongoose.model("Question", questionSchema);
+const Question = mongoose.model<IQuestion>(
+  "Question",
+  questionSchema
+);
 
-module.exports = Question;
+export default Question;

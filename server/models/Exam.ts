@@ -1,6 +1,26 @@
-const mongoose = require("mongoose");
+import mongoose, { Schema, Document } from "mongoose";
 
-const examSchema = new mongoose.Schema(
+export interface IExam extends Document {
+  title: string;
+  description: string;
+  duration: number;
+  questionCount: number;
+  totalMarks: number;
+  passingMarks: number;
+  negativeMarking: boolean;
+  negativePenalty: number;
+  published: boolean;
+  createdBy: mongoose.Types.ObjectId;
+  category: string;
+  instructions: string[];
+  shuffleQuestions: boolean;
+  shuffleOptions: boolean;
+  allowedAttempts: number;
+  startDate: Date | null;
+  endDate: Date | null;
+}
+
+const examSchema = new Schema<IExam>(
   {
     title: {
       type: String,
@@ -16,7 +36,10 @@ const examSchema = new mongoose.Schema(
 
     duration: {
       type: Number,
-      required: [true, "Exam duration (in minutes) is required"],
+      required: [
+        true,
+        "Exam duration (in minutes) is required",
+      ],
       min: [1, "Duration must be at least 1 minute"],
     },
 
@@ -55,9 +78,12 @@ const examSchema = new mongoose.Schema(
     },
 
     createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Schema.Types.ObjectId,
       ref: "User",
-      required: [true, "Exam creator (instructor) is required"],
+      required: [
+        true,
+        "Exam creator (instructor) is required",
+      ],
     },
 
     category: {
@@ -107,10 +133,19 @@ const examSchema = new mongoose.Schema(
   }
 );
 
-// High performance indexes
-examSchema.index({ createdBy: 1, published: 1 });
-examSchema.index({ published: 1, category: 1 });
+examSchema.index({
+  createdBy: 1,
+  published: 1,
+});
 
-const Exam = mongoose.model("Exam", examSchema);
+examSchema.index({
+  published: 1,
+  category: 1,
+});
 
-module.exports = Exam;
+const Exam = mongoose.model<IExam>(
+  "Exam",
+  examSchema
+);
+
+export default Exam;

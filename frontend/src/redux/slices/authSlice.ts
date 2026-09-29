@@ -1,51 +1,95 @@
-import { createSlice } from "@reduxjs/toolkit";
-import type { PayloadAction } from "@reduxjs/toolkit";
+import {
+  createSlice,
+} from "@reduxjs/toolkit";
 
-type UserRole = "student" | "instructor";
+import type {
+  PayloadAction,
+} from "@reduxjs/toolkit";
 
-interface User {
+export type UserRole =
+  | "student"
+  | "instructor";
+
+export interface User {
   id: string;
+
   name: string;
   email: string;
+
   role: UserRole;
+
+  degree?: string;
+  yearOfStudy?: number;
+  semester?: number;
+  studentId?: string;
+
+  phone?: string;
+  city?: string;
+  bio?: string;
+
+  profilePicture?: string;
 }
 
 interface AuthState {
   user: User | null;
-  token: string | null;
   isAuthenticated: boolean;
 }
 
-const initialState: AuthState = {
+const initialState:
+  AuthState = {
   user: null,
-  token: null,
   isAuthenticated: false,
 };
 
-const authSlice = createSlice({
-  name: "auth",
-  initialState,
-  reducers: {
-    login: (
-      state,
-      action: PayloadAction<{
-        user: User;
-        token: string;
-      }>
-    ) => {
-      state.user = action.payload.user;
-      state.token = action.payload.token;
-      state.isAuthenticated = true;
-    },
+const authSlice =
+  createSlice({
+    name: "auth",
 
-    logout: (state) => {
-      state.user = null;
-      state.token = null;
-      state.isAuthenticated = false;
-    },
-  },
-});
+    initialState,
 
-export const { login, logout } = authSlice.actions;
+    reducers: {
+      login: (
+        state,
+        action: PayloadAction<{
+          user: User;
+        }>
+      ) => {
+        state.user =
+          action.payload.user;
+
+        state.isAuthenticated =
+          true;
+      },
+
+      updateUser: (
+        state,
+        action: PayloadAction<
+          Partial<User>
+        >
+      ) => {
+        if (state.user) {
+          state.user = {
+            ...state.user,
+            ...action.payload,
+          };
+        }
+      },
+
+      logout: (
+        state
+      ) => {
+        state.user = null;
+        state.isAuthenticated =
+          false;
+      },
+    },
+  });
+
+export const {
+  login,
+  updateUser,
+  logout,
+} =
+  authSlice.actions;
 
 export default authSlice.reducer;
