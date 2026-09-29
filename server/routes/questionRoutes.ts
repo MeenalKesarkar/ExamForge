@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 
 import Question from "../models/Question";
 import Exam from "../models/Exam";
-import Attempt from "../models/Attempt";
 
 import {
   requireAuth,
@@ -13,40 +12,45 @@ import {
 const router = Router();
 
 /* =========================================================
-   Helpers
+   TYPES
 ========================================================= */
 
-const isValidObjectId = (id: string): boolean => {
-  return mongoose.Types.ObjectId.isValid(id);
-};
+interface QuestionBody {
+  questionText?: string;
+  type?: "single" | "multi";
+  options?: string[];
+  correctAnswers?: string[];
+  marks?: number | string;
+  explanation?: string;
+  difficulty?: "easy" | "medium" | "hard";
+  order?: number | string;
+}
 
-const getExamId = (value: unknown): string => {
-  if (typeof value === "string") {
-    return value;
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const getParam = (
+  value: string | string[] | undefined
+): string => {
+  if (Array.isArray(value)) {
+    return value[0] ?? "";
   }
 
-  if (
-    value &&
-    typeof value === "object" &&
-    "_id" in value
-  ) {
-    const objectValue = value as {
-      _id?: unknown;
-    };
-
-    if (typeof objectValue._id === "string") {
-      return objectValue._id;
-    }
-  }
-
-  return "";
+  return value ?? "";
 };
 
-const normalizeString = (value: unknown): string => {
-  return typeof value === "string" ? value.trim() : "";
+const isValidObjectId = (
+  value: string
+): boolean => {
+  return mongoose.Types.ObjectId.isValid(
+    value
+  );
 };
 
-const normalizeStringArray = (value: unknown): string[] => {
+const cleanStringArray = (
+  value: unknown
+): string[] => {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -60,211 +64,234 @@ const normalizeStringArray = (value: unknown): string[] => {
     .filter(Boolean);
 };
 
-const isInstructor = (
-  req: AuthenticatedRequest
-): boolean => {
-  return req.user?.role === "instructor";
-};
-
-/* =========================================================
-   Check exam ownership
-========================================================= */
-
-const getOwnedExam = async (
-  examId: string,
-  req: AuthenticatedRequest,
-  res: Response
+const getQuestionBody = (
+  body: QuestionBody
 ) => {
-  if (!isValidObjectId(examId)) {
-    res.status(400).json({
-      message: "Invalid exam ID",
-    });
-
-    return null;
-  }
-
-  if (!req.user?.userId) {
-    res.status(401).json({
-      message: "Authentication required",
-    });
-
-    return null;
-  }
-
-  if (!isInstructor(req)) {
-    res.status(403).json({
-      message: "Instructor access required",
-    });
-
-    return null;
-  }
-
-  const exam = await Exam.findById(examId);
-
-  if (!exam) {
-    res.status(404).json({
-      message: "Exam not found",
-    });
-
-    return null;
-  }
-
-  if (exam.createdBy.toString() !== req.user.userId) {
-    res.status(403).json({
-      message:
-        "You do not have permission to manage this exam",
-    });
-
-    return null;
-  }
-
-  return exam;
-};
-
-/* =========================================================
-   Validate question data
-========================================================= */
-
-const validateQuestionData = (body: any) => {
-  const questionText = normalizeString(
-    body.questionText
-  );
-
-  const type =
-    body.type === "multi" ||
-    body.type === "single"
-      ? body.type
+  const questionText =
+    typeof body.questionText === "string"
+      ? body.questionText.trim()
       : "";
 
-  const options = normalizeStringArray(
-    body.options
-  );
+  const type =
+    body.type === "multi"
+      ? "multi"
+      : "single";
 
-  const correctAnswers = normalizeStringArray(
-    body.correctAnswers
-  );
+  const options =
+    cleanStringArray(body.options);
 
-  const explanation = normalizeString(
-    body.explanation
-  );
+  const correctAnswers =
+    cleanStringArray(
+      body.correctAnswers
+    );
+
+  const marks =
+    body.marks !== undefined &&
+    body.marks !== null &&
+    body.marks !== ""
+      ? Number(body.marks)
+      : 1;
+
+  const explanation =
+    typeof body.explanation === "string"
+      ? body.explanation.trim()
+      : "";
 
   const difficulty =
     body.difficulty === "easy" ||
-    body.difficulty === "medium" ||
     body.difficulty === "hard"
       ? body.difficulty
       : "medium";
 
-  const marks = Number(body.marks);
-
   const order =
-    body.order === undefined ||
-    body.order === null ||
-    body.order === ""
-      ? undefined
-      : Number(body.order);
-
-  const errors: string[] = [];
-
-  if (!questionText) {
-    errors.push("Question text is required");
-  }
-
-  if (questionText.length > 2000) {
-    errors.push(
-      "Question text cannot exceed 2000 characters"
-    );
-  }
-
-  if (!type) {
-    errors.push(
-      "Question type must be single or multi"
-    );
-  }
-
-  if (options.length < 2) {
-    errors.push("At least 2 options are required");
-  }
-
-  if (options.length > 6) {
-    errors.push(
-      "A maximum of 6 options is allowed"
-    );
-  }
-
-  if (new Set(options).size !== options.length) {
-    errors.push("Options must be unique");
-  }
-
-  if (correctAnswers.length === 0) {
-    errors.push(
-      "At least one correct answer is required"
-    );
-  }
-
-  if (
-    type === "single" &&
-    correctAnswers.length !== 1
-  ) {
-    errors.push(
-      "A single-correct question must have exactly one correct answer"
-    );
-  }
-
-  if (
-    type === "multi" &&
-    correctAnswers.length < 1
-  ) {
-    errors.push(
-      "A multiple-correct question must have at least one correct answer"
-    );
-  }
-
-  const invalidCorrectAnswer =
-    correctAnswers.some(
-      (answer) => !options.includes(answer)
-    );
-
-  if (invalidCorrectAnswer) {
-    errors.push(
-      "Every correct answer must match one of the provided options"
-    );
-  }
-
-  if (!Number.isFinite(marks) || marks <= 0) {
-    errors.push("Marks must be greater than 0");
-  }
-
-  if (marks > 100) {
-    errors.push("Marks cannot exceed 100");
-  }
-
-  if (
-    order !== undefined &&
-    (!Number.isFinite(order) || order < 1)
-  ) {
-    errors.push(
-      "Order must be a positive number"
-    );
-  }
+    body.order !== undefined &&
+    body.order !== null &&
+    body.order !== ""
+      ? Number(body.order)
+      : 1;
 
   return {
-    errors,
-    data: {
-      questionText,
-      type,
-      options,
-      correctAnswers,
-      marks,
-      explanation,
-      difficulty,
-      order,
-    },
+    questionText,
+    type,
+    options,
+    correctAnswers,
+    marks,
+    explanation,
+    difficulty,
+    order,
   };
 };
 
 /* =========================================================
-   GET QUESTIONS FOR AN EXAM
+   VERIFY INSTRUCTOR OWNS EXAM
+========================================================= */
+
+const getInstructorExam =
+  async (
+    examId: string,
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    if (
+      req.user?.role !==
+      "instructor"
+    ) {
+      res.status(403).json({
+        message:
+          "Instructor access required",
+      });
+
+      return null;
+    }
+
+    if (
+      !req.user?.userId ||
+      !isValidObjectId(
+        req.user.userId
+      )
+    ) {
+      res.status(401).json({
+        message:
+          "Invalid instructor authentication",
+      });
+
+      return null;
+    }
+
+    const exam =
+      await Exam.findById(
+        examId
+      );
+
+    if (!exam) {
+      res.status(404).json({
+        message:
+          "Exam not found",
+      });
+
+      return null;
+    }
+
+    if (
+      exam.createdBy.toString() !==
+      req.user.userId
+    ) {
+      res.status(403).json({
+        message:
+          "You are not allowed to manage questions for this exam",
+      });
+
+      return null;
+    }
+
+    return exam;
+  };
+
+/* =========================================================
+   VALIDATE QUESTION DATA
+========================================================= */
+
+const validateQuestionData = (
+  data: ReturnType<
+    typeof getQuestionBody
+  >
+): string | null => {
+  if (!data.questionText) {
+    return "Question text is required";
+  }
+
+  if (data.questionText.length > 2000) {
+    return "Question text cannot exceed 2000 characters";
+  }
+
+  if (
+    data.options.length < 2 ||
+    data.options.length > 10
+  ) {
+    return "A question must have between 2 and 10 options";
+  }
+
+  /*
+   * Prevent duplicate options.
+   */
+  const uniqueOptions =
+    new Set(data.options);
+
+  if (
+    uniqueOptions.size !==
+    data.options.length
+  ) {
+    return "Question options must be unique";
+  }
+
+  if (
+    data.correctAnswers.length === 0
+  ) {
+    return "At least one correct answer is required";
+  }
+
+  /*
+   * Every correct answer must exist
+   * inside the options.
+   */
+  const optionSet =
+    new Set(data.options);
+
+  const invalidCorrectAnswer =
+    data.correctAnswers.some(
+      (answer) =>
+        !optionSet.has(answer)
+    );
+
+  if (invalidCorrectAnswer) {
+    return "Every correct answer must be one of the question options";
+  }
+
+  /*
+   * Single-select question.
+   */
+  if (
+    data.type === "single" &&
+    data.correctAnswers.length !== 1
+  ) {
+    return "A single-choice question must have exactly one correct answer";
+  }
+
+  /*
+   * Multi-select question.
+   */
+  if (
+    data.type === "multi" &&
+    data.correctAnswers.length < 2
+  ) {
+    return "A multi-select question must have at least two correct answers";
+  }
+
+  if (
+    !Number.isFinite(data.marks) ||
+    data.marks <= 0
+  ) {
+    return "Marks must be greater than 0";
+  }
+
+  if (
+    !Number.isInteger(data.order) ||
+    data.order < 1
+  ) {
+    return "Order must be a positive whole number";
+  }
+
+  if (
+    data.explanation.length > 2000
+  ) {
+    return "Explanation cannot exceed 2000 characters";
+  }
+
+  return null;
+};
+
+/* =========================================================
+   GET QUESTIONS FOR EXAM
    GET /api/questions/exam/:examId
 ========================================================= */
 
@@ -276,71 +303,48 @@ router.get(
     res: Response
   ) => {
     try {
-      /*
-       * Express can type params as string | string[].
-       * Convert explicitly to string.
-       */
-      const examId = String(req.params.examId);
+      const examId = getParam(
+        req.params.examId
+      );
 
-      if (!isValidObjectId(examId)) {
+      if (
+        !isValidObjectId(examId)
+      ) {
         return res.status(400).json({
-          message: "Invalid exam ID",
+          message:
+            "Invalid exam ID",
         });
       }
 
-      const exam = await Exam.findById(examId);
+      /*
+       * Question Bank is instructor-only.
+       */
+      const exam =
+        await getInstructorExam(
+          examId,
+          req,
+          res
+        );
 
       if (!exam) {
-        return res.status(404).json({
-          message: "Exam not found",
-        });
+        return;
       }
 
-      const userId = req.user?.userId;
-      const role = req.user?.role;
+      const questions =
+        await Question.find({
+          examId:
+            new mongoose.Types.ObjectId(
+              examId
+            ),
+        })
+          .sort({
+            order: 1,
+            createdAt: 1,
+          })
+          .lean();
 
-      /*
-       * Only instructors can access the complete
-       * question bank.
-       */
-      if (role === "instructor") {
-        if (!userId) {
-          return res.status(401).json({
-            message: "Authentication required",
-          });
-        }
-
-        if (
-          exam.createdBy.toString() !== userId
-        ) {
-          return res.status(403).json({
-            message:
-              "You do not have permission to view this question bank",
-          });
-        }
-
-        const questions = await Question.find({
-          examId,
-        }).sort({
-          order: 1,
-          createdAt: 1,
-        });
-
-        return res.status(200).json({
-          questions,
-        });
-      }
-
-      /*
-       * Students must never receive the complete
-       * question bank from this endpoint.
-       *
-       * Their assigned questions are returned through
-       * the Attempt endpoint.
-       */
-      return res.status(403).json({
-        message:
-          "Students cannot access the exam question bank directly",
+      return res.status(200).json({
+        questions,
       });
     } catch (error) {
       console.error(
@@ -349,7 +353,8 @@ router.get(
       );
 
       return res.status(500).json({
-        message: "Failed to fetch questions",
+        message:
+          "Failed to load question bank",
       });
     }
   }
@@ -364,130 +369,124 @@ router.post(
   "/",
   requireAuth,
   async (
-    req: AuthenticatedRequest,
+    req: AuthenticatedRequest & {
+      body: QuestionBody & {
+        examId?: string;
+      };
+    },
     res: Response
   ) => {
     try {
-      if (!isInstructor(req)) {
+      if (
+        req.user?.role !==
+        "instructor"
+      ) {
         return res.status(403).json({
           message:
-            "Only instructors can create questions",
+            "Instructor access required",
         });
       }
 
-      const examId = getExamId(
-        req.body.examId
-      );
+      const examId =
+        typeof req.body.examId ===
+        "string"
+          ? req.body.examId.trim()
+          : "";
 
-      if (!examId) {
+      if (
+        !examId ||
+        !isValidObjectId(examId)
+      ) {
         return res.status(400).json({
-          message: "Exam ID is required",
+          message:
+            "Valid exam ID is required",
         });
       }
 
-      const exam = await getOwnedExam(
-        examId,
-        req,
-        res
-      );
+      const exam =
+        await getInstructorExam(
+          examId,
+          req,
+          res
+        );
 
       if (!exam) {
         return;
       }
 
-      const validation =
-        validateQuestionData(req.body);
+      const data =
+        getQuestionBody(req.body);
 
-      if (validation.errors.length > 0) {
+      const validationError =
+        validateQuestionData(data);
+
+      if (validationError) {
         return res.status(400).json({
-          message: validation.errors[0],
-          errors: validation.errors,
+          message:
+            validationError,
         });
       }
 
-      const {
-        questionText,
-        type,
-        options,
-        correctAnswers,
-        marks,
-        explanation,
-        difficulty,
-        order,
-      } = validation.data;
-
       /*
-       * If order is not supplied, add the question
-       * after the current last question.
-       */
-      let finalOrder = order;
-
-      if (finalOrder === undefined) {
-        const lastQuestion =
-          await Question.findOne({
-            examId: exam._id,
-          }).sort({
-            order: -1,
-          });
-
-        finalOrder = lastQuestion?.order
-          ? Number(lastQuestion.order) + 1
-          : 1;
-      }
-
-      /*
-       * Avoid duplicate order numbers.
+       * Check whether the order is already used.
        */
       const existingOrder =
         await Question.findOne({
-          examId: exam._id,
-          order: finalOrder,
-        });
+          examId:
+            new mongoose.Types.ObjectId(
+              examId
+            ),
+          order: data.order,
+        }).lean();
 
       if (existingOrder) {
-        finalOrder =
-          (await Question.countDocuments({
-            examId: exam._id,
-          })) + 1;
+        return res.status(409).json({
+          message:
+            `Question order ${data.order} is already being used`,
+        });
       }
+
+      /*
+       * Don't allow the instructor to create
+       * more questions than the configured
+       * question bank capacity accidentally.
+       *
+       * The bank can contain more questions than
+       * questionCount when randomization is used.
+       * Therefore we don't hard-limit it here.
+       */
 
       const question =
         await Question.create({
-          examId: exam._id,
-          questionText,
-          type,
-          options,
-          correctAnswers,
-          marks,
-          explanation,
-          difficulty,
-          order: finalOrder,
+          examId:
+            new mongoose.Types.ObjectId(
+              examId
+            ),
+
+          questionText:
+            data.questionText,
+
+          type:
+            data.type,
+
+          options:
+            data.options,
+
+          correctAnswers:
+            data.correctAnswers,
+
+          marks:
+            data.marks,
+
+          explanation:
+            data.explanation,
+
+          difficulty:
+            data.difficulty,
+
+          order:
+            data.order,
         });
-
-      /*
-       * Recalculate exam total marks.
-       */
-      const totalMarks =
-        await Question.aggregate([
-          {
-            $match: {
-              examId: exam._id,
-            },
-          },
-          {
-            $group: {
-              _id: null,
-              total: {
-                $sum: "$marks",
-              },
-            },
-          },
-        ]);
-
-      exam.totalMarks =
-        totalMarks[0]?.total || 0;
-
-      await exam.save();
 
       return res.status(201).json({
         message:
@@ -501,7 +500,8 @@ router.post(
       );
 
       return res.status(500).json({
-        message: "Failed to create question",
+        message:
+          "Failed to create question",
       });
     }
   }
@@ -516,125 +516,124 @@ router.put(
   "/:questionId",
   requireAuth,
   async (
-    req: AuthenticatedRequest,
+    req: AuthenticatedRequest & {
+      body: QuestionBody;
+    },
     res: Response
   ) => {
     try {
-      if (!isInstructor(req)) {
+      if (
+        req.user?.role !==
+        "instructor"
+      ) {
         return res.status(403).json({
           message:
-            "Only instructors can update questions",
+            "Instructor access required",
         });
       }
 
-      /*
-       * Explicit String() fixes:
-       * string | string[] -> string
-       */
-      const questionId = String(
-        req.params.questionId
-      );
+      const questionId =
+        getParam(
+          req.params.questionId
+        );
 
-      if (!isValidObjectId(questionId)) {
+      if (
+        !isValidObjectId(
+          questionId
+        )
+      ) {
         return res.status(400).json({
-          message: "Invalid question ID",
+          message:
+            "Invalid question ID",
         });
       }
 
       const question =
-        await Question.findById(questionId);
+        await Question.findById(
+          questionId
+        );
 
       if (!question) {
         return res.status(404).json({
-          message: "Question not found",
+          message:
+            "Question not found",
         });
       }
 
-      const examId = getExamId(
-        question.examId
-      );
-
-      const exam = await getOwnedExam(
-        examId,
-        req,
-        res
-      );
+      const exam =
+        await getInstructorExam(
+          question.examId.toString(),
+          req,
+          res
+        );
 
       if (!exam) {
         return;
       }
 
-      const validation =
-        validateQuestionData(req.body);
+      const data =
+        getQuestionBody(req.body);
 
-      if (validation.errors.length > 0) {
+      const validationError =
+        validateQuestionData(data);
+
+      if (validationError) {
         return res.status(400).json({
-          message: validation.errors[0],
-          errors: validation.errors,
+          message:
+            validationError,
         });
       }
 
-      const {
-        questionText,
-        type,
-        options,
-        correctAnswers,
-        marks,
-        explanation,
-        difficulty,
-        order,
-      } = validation.data;
+      /*
+       * Make sure another question isn't already
+       * using the requested order.
+       */
+      const duplicateOrder =
+        await Question.findOne({
+          examId:
+            question.examId,
 
-      question.questionText =
-        questionText;
+          order:
+            data.order,
 
-      question.type =
-        type as "single" | "multi";
+          _id: {
+            $ne:
+              question._id,
+          },
+        }).lean();
 
-      question.options = options;
-
-      question.correctAnswers =
-        correctAnswers;
-
-      question.marks = marks;
-
-      question.explanation =
-        explanation;
-
-      question.difficulty =
-        difficulty;
-
-      if (order !== undefined) {
-        question.order = order;
+      if (duplicateOrder) {
+        return res.status(409).json({
+          message:
+            `Question order ${data.order} is already being used`,
+        });
       }
 
+      question.questionText =
+        data.questionText;
+
+      question.type =
+        data.type;
+
+      question.options =
+        data.options;
+
+      question.correctAnswers =
+        data.correctAnswers;
+
+      question.marks =
+        data.marks;
+
+      question.explanation =
+        data.explanation;
+
+      question.difficulty =
+        data.difficulty;
+
+      question.order =
+        data.order;
+
       await question.save();
-
-      /*
-       * Recalculate exam total marks after
-       * editing the question.
-       */
-      const totalMarks =
-        await Question.aggregate([
-          {
-            $match: {
-              examId: exam._id,
-            },
-          },
-          {
-            $group: {
-              _id: null,
-              total: {
-                $sum: "$marks",
-              },
-            },
-          },
-        ]);
-
-      exam.totalMarks =
-        totalMarks[0]?.total || 0;
-
-      await exam.save();
 
       return res.status(200).json({
         message:
@@ -648,7 +647,8 @@ router.put(
       );
 
       return res.status(500).json({
-        message: "Failed to update question",
+        message:
+          "Failed to update question",
       });
     }
   }
@@ -667,119 +667,61 @@ router.delete(
     res: Response
   ) => {
     try {
-      if (!isInstructor(req)) {
+      if (
+        req.user?.role !==
+        "instructor"
+      ) {
         return res.status(403).json({
           message:
-            "Only instructors can delete questions",
+            "Instructor access required",
         });
       }
 
-      /*
-       * Explicit String() fixes:
-       * string | string[] -> string
-       */
-      const questionId = String(
-        req.params.questionId
-      );
+      const questionId =
+        getParam(
+          req.params.questionId
+        );
 
-      if (!isValidObjectId(questionId)) {
+      if (
+        !isValidObjectId(
+          questionId
+        )
+      ) {
         return res.status(400).json({
-          message: "Invalid question ID",
+          message:
+            "Invalid question ID",
         });
       }
 
       const question =
-        await Question.findById(questionId);
+        await Question.findById(
+          questionId
+        );
 
       if (!question) {
         return res.status(404).json({
-          message: "Question not found",
+          message:
+            "Question not found",
         });
       }
 
-      const examId = getExamId(
-        question.examId
-      );
-
-      const exam = await getOwnedExam(
-        examId,
-        req,
-        res
-      );
+      /*
+       * Verify ownership through the exam.
+       */
+      const exam =
+        await getInstructorExam(
+          question.examId.toString(),
+          req,
+          res
+        );
 
       if (!exam) {
         return;
       }
 
-      /*
-       * Do not delete questions after students
-       * have already attempted the exam.
-       *
-       * This protects historical attempts because
-       * their questionIds refer to these questions.
-       */
-      const attemptCount =
-        await Attempt.countDocuments({
-          examId: exam._id,
-        });
-
-      if (attemptCount > 0) {
-        return res.status(409).json({
-          message:
-            "This question cannot be deleted because students have already attempted this exam.",
-        });
-      }
-
       await Question.findByIdAndDelete(
         questionId
       );
-
-      /*
-       * Re-number remaining questions.
-       */
-      const remainingQuestions =
-        await Question.find({
-          examId: exam._id,
-        }).sort({
-          order: 1,
-          createdAt: 1,
-        });
-
-      for (
-        let index = 0;
-        index < remainingQuestions.length;
-        index++
-      ) {
-        remainingQuestions[index].order =
-          index + 1;
-
-        await remainingQuestions[index].save();
-      }
-
-      /*
-       * Recalculate exam total marks.
-       */
-      const totalMarks =
-        await Question.aggregate([
-          {
-            $match: {
-              examId: exam._id,
-            },
-          },
-          {
-            $group: {
-              _id: null,
-              total: {
-                $sum: "$marks",
-              },
-            },
-          },
-        ]);
-
-      exam.totalMarks =
-        totalMarks[0]?.total || 0;
-
-      await exam.save();
 
       return res.status(200).json({
         message:
@@ -792,7 +734,8 @@ router.delete(
       );
 
       return res.status(500).json({
-        message: "Failed to delete question",
+        message:
+          "Failed to delete question",
       });
     }
   }

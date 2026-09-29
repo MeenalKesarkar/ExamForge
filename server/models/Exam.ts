@@ -3,108 +3,98 @@ import mongoose, {
   Schema,
 } from "mongoose";
 
-// ======================================================
-// EXAM INTERFACE
-// ======================================================
+/* =========================================================
+   TYPES
+========================================================= */
 
-export interface IExam
-  extends Document {
+export interface IExam extends Document {
   title: string;
+  subject?: string;
 
-  // Academic assignment
-  subject: string;
-  degree: string;
-  yearOfStudy: number;
-  semester: number;
+  degree?: string;
+  yearOfStudy?: number;
+  semester?: number;
 
-  // Exam configuration
   duration: number;
   questionCount: number;
+
   totalMarks: number;
   passingMarks: number;
 
-  // Negative marking
   negativeMarking: boolean;
   negativePenalty: number;
 
-  // Instructions
-  instructions: string[];
-
-  // Publishing
-  published: boolean;
-
-  // Attempts
   allowedAttempts: number;
 
-  // Optional scheduling
-  startDate?: Date | null;
-  endDate?: Date | null;
+  startDate?: Date;
+  endDate?: Date;
 
-  // Question behavior
+  instructions: string[];
+
   shuffleQuestions: boolean;
   shuffleOptions: boolean;
 
-  // Instructor
+  published: boolean;
+
   createdBy: mongoose.Types.ObjectId;
 
   createdAt: Date;
   updatedAt: Date;
 }
 
-// ======================================================
-// EXAM SCHEMA
-// ======================================================
+/* =========================================================
+   SCHEMA
+========================================================= */
 
 const examSchema =
   new Schema<IExam>(
     {
-      // --------------------------------------------------
-      // BASIC INFORMATION
-      // --------------------------------------------------
+      /* =====================================================
+         BASIC INFORMATION
+      ===================================================== */
 
       title: {
         type: String,
         required: true,
         trim: true,
+        minlength: 2,
         maxlength: 200,
       },
 
       subject: {
         type: String,
-        required: true,
         trim: true,
         maxlength: 150,
+        default: "",
       },
 
-      // --------------------------------------------------
-      // ACADEMIC INFORMATION
-      // --------------------------------------------------
+      /* =====================================================
+         ACADEMIC TARGETING
+      ===================================================== */
 
       degree: {
         type: String,
-        required: true,
-        default: "BCA",
         trim: true,
-        uppercase: true,
+        default: "BCA",
       },
 
       yearOfStudy: {
         type: Number,
-        required: true,
         min: 1,
         max: 3,
+        required: false,
       },
 
       semester: {
         type: Number,
-        required: true,
         min: 1,
         max: 6,
+        required: false,
       },
 
-      // --------------------------------------------------
-      // EXAM CONFIGURATION
-      // --------------------------------------------------
+      /* =====================================================
+         EXAM CONFIGURATION
+      ===================================================== */
 
       duration: {
         type: Number,
@@ -121,7 +111,7 @@ const examSchema =
       totalMarks: {
         type: Number,
         required: true,
-        min: 1,
+        min: 0,
       },
 
       passingMarks: {
@@ -130,9 +120,9 @@ const examSchema =
         min: 0,
       },
 
-      // --------------------------------------------------
-      // NEGATIVE MARKING
-      // --------------------------------------------------
+      /* =====================================================
+         NEGATIVE MARKING
+      ===================================================== */
 
       negativeMarking: {
         type: Boolean,
@@ -145,53 +135,43 @@ const examSchema =
         min: 0,
       },
 
-      // --------------------------------------------------
-      // INSTRUCTIONS
-      // --------------------------------------------------
+      /* =====================================================
+         ATTEMPTS
+      ===================================================== */
+
+      allowedAttempts: {
+        type: Number,
+        default: 1,
+        min: 1,
+        max: 10,
+      },
+
+      /* =====================================================
+         AVAILABILITY
+      ===================================================== */
+
+      startDate: {
+        type: Date,
+        required: false,
+      },
+
+      endDate: {
+        type: Date,
+        required: false,
+      },
+
+      /* =====================================================
+         INSTRUCTIONS
+      ===================================================== */
 
       instructions: {
         type: [String],
         default: [],
       },
 
-      // --------------------------------------------------
-      // PUBLISHING
-      // --------------------------------------------------
-
-      published: {
-        type: Boolean,
-        default: false,
-        index: true,
-      },
-
-      // --------------------------------------------------
-      // ATTEMPTS
-      // --------------------------------------------------
-
-      allowedAttempts: {
-        type: Number,
-        default: 2,
-        min: 1,
-        max: 3,
-      },
-
-      // --------------------------------------------------
-      // OPTIONAL EXAM SCHEDULE
-      // --------------------------------------------------
-
-      startDate: {
-        type: Date,
-        default: null,
-      },
-
-      endDate: {
-        type: Date,
-        default: null,
-      },
-
-      // --------------------------------------------------
-      // QUESTION RANDOMIZATION
-      // --------------------------------------------------
+      /* =====================================================
+         SHUFFLING
+      ===================================================== */
 
       shuffleQuestions: {
         type: Boolean,
@@ -203,9 +183,19 @@ const examSchema =
         default: false,
       },
 
-      // --------------------------------------------------
-      // INSTRUCTOR
-      // --------------------------------------------------
+      /* =====================================================
+         PUBLISH STATUS
+      ===================================================== */
+
+      published: {
+        type: Boolean,
+        default: false,
+        index: true,
+      },
+
+      /* =====================================================
+         INSTRUCTOR
+      ===================================================== */
 
       createdBy: {
         type: Schema.Types.ObjectId,
@@ -220,10 +210,21 @@ const examSchema =
     }
   );
 
-// ======================================================
-// INDEXES
-// ======================================================
+/* =========================================================
+   INDEXES
+========================================================= */
 
+/*
+ * Instructor's exams.
+ */
+examSchema.index({
+  createdBy: 1,
+  createdAt: -1,
+});
+
+/*
+ * Published exams filtered by academic structure.
+ */
 examSchema.index({
   published: 1,
   degree: 1,
@@ -231,16 +232,20 @@ examSchema.index({
   semester: 1,
 });
 
+/*
+ * Exam availability.
+ */
 examSchema.index({
-  createdBy: 1,
-  createdAt: -1,
+  startDate: 1,
+  endDate: 1,
 });
 
-// ======================================================
-// MODEL
-// ======================================================
+/* =========================================================
+   MODEL
+========================================================= */
 
 const Exam =
+  mongoose.models.Exam ||
   mongoose.model<IExam>(
     "Exam",
     examSchema
