@@ -11,6 +11,7 @@ import StudentDashboard from "./pages/StudentDashboard";
 import StudentProfile from "./pages/StudentProfile";
 
 import InstructorDashboard from "./pages/InstructorDashboard";
+import CreateExam from "./pages/CreateExam";
 import ExamPage from "./pages/ExamPage";
 
 // ======================================================
@@ -73,6 +74,11 @@ function App() {
           element={
             <InstructorDashboard />
           }
+        />
+
+        <Route
+          path="/instructor/exams/new"
+          element={<CreateExam />}
         />
       </Routes>
     </BrowserRouter>
