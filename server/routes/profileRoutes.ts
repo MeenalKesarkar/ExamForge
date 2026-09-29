@@ -1,538 +1,304 @@
-import express, {
-  Request,
-  Response,
-  NextFunction,
-} from "express";
-
-import jwt, {
-  JwtPayload,
-} from "jsonwebtoken";
+import { Router, Response } from "express";
 
 import User from "../models/User";
+import {
+  requireAuth,
+  AuthenticatedRequest,
+} from "../middleware/authMiddleware";
 
-const router = express.Router();
+const router = Router();
 
-// ======================================================
-// TYPES
-// ======================================================
+/* =========================================================
+   Helpers
+========================================================= */
 
-interface AuthTokenPayload
-  extends JwtPayload {
-  userId: string;
-  role:
-    | "student"
-    | "instructor";
-}
-
-// ======================================================
-// AUTHENTICATION
-// ======================================================
-
-const authenticate = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const token =
-      req.cookies?.examforge_access_token;
-
-    if (!token) {
-      return res.status(401).json({
-        message:
-          "Authentication required",
-      });
-    }
-
-    const secret =
-      process.env.ACCESS_TOKEN_SECRET;
-
-    if (!secret) {
-      console.error(
-        "ACCESS_TOKEN_SECRET is missing from .env"
-      );
-
-      return res.status(500).json({
-        message:
-          "Authentication configuration is missing",
-      });
-    }
-
-    const decoded =
-      jwt.verify(
-        token,
-        secret
-      ) as AuthTokenPayload;
-
-    if (!decoded.userId) {
-      return res.status(401).json({
-        message:
-          "Invalid authentication token",
-      });
-    }
-
-    (
-      req as Request & {
-        user?: AuthTokenPayload;
-      }
-    ).user = decoded;
-
-    next();
-  } catch (error) {
-    console.error(
-      "Profile authentication error:",
-      error
-    );
-
-    return res.status(401).json({
-      message:
-        "Invalid or expired authentication token",
-    });
+const normalizeString = (
+  value: unknown
+): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
   }
+
+  const trimmed = value.trim();
+
+  return trimmed || undefined;
 };
 
-// ======================================================
-// GET MY PROFILE
-// ======================================================
-//
-// GET /api/profile/me
-//
-// ======================================================
+const sanitizeUser = (user: any) => ({
+  id: user._id.toString(),
+  name: user.name,
+  email: user.email,
+  role: user.role,
+
+  degree: user.degree,
+  yearOfStudy: user.yearOfStudy,
+  semester: user.semester,
+  studentId: user.studentId,
+
+  phone: user.phone,
+  city: user.city,
+  bio: user.bio,
+  profilePicture: user.profilePicture || null,
+});
+
+/* =========================================================
+   GET CURRENT PROFILE
+   GET /api/profile/me
+========================================================= */
 
 router.get(
   "/me",
-  authenticate,
+  requireAuth,
   async (
-    req: Request,
+    req: AuthenticatedRequest,
     res: Response
   ) => {
     try {
-      const authReq =
-        req as Request & {
-          user?: AuthTokenPayload;
-        };
-
-      const userId =
-        authReq.user?.userId;
-
-      if (!userId) {
+      if (!req.user?.userId) {
         return res.status(401).json({
-          message:
-            "Authentication required",
+          message: "Authentication required",
         });
       }
 
-      const user =
-        await User.findById(
-          userId
-        ).select(
-          "-passwordHash"
-        );
+      const user = await User.findById(
+        req.user.userId
+      );
 
       if (!user) {
         return res.status(404).json({
+          message: "User not found",
+        });
+      }
+
+      if (!user.isActive) {
+        return res.status(403).json({
           message:
-            "User not found",
+            "Your account has been disabled",
         });
       }
 
       return res.status(200).json({
-        user: {
-          id: user._id.toString(),
-          _id: user._id.toString(),
-
-          name: user.name,
-          email: user.email,
-          role: user.role,
-
-          degree:
-            user.degree || "BCA",
-
-          yearOfStudy:
-            user.yearOfStudy,
-
-          semester:
-            user.semester,
-
-          studentId:
-            user.studentId || "",
-
-          phone:
-            user.phone || "",
-
-          city:
-            user.city || "",
-
-          bio:
-            user.bio || "",
-
-          profilePicture:
-            user.profilePicture || "",
-
-          isActive:
-            user.isActive,
-        },
+        user: sanitizeUser(user),
       });
     } catch (error) {
       console.error(
-        "Get profile error:",
+        "GET /api/profile/me error:",
         error
       );
 
       return res.status(500).json({
         message:
-          "Failed to load profile",
+          "Failed to load your profile",
       });
     }
   }
 );
 
-// ======================================================
-// UPDATE MY PROFILE
-// ======================================================
-//
-// PUT /api/profile/me
-//
-// ======================================================
+/* =========================================================
+   UPDATE CURRENT PROFILE
+   PUT /api/profile/me
+========================================================= */
 
 router.put(
   "/me",
-  authenticate,
+  requireAuth,
   async (
-    req: Request,
+    req: AuthenticatedRequest,
     res: Response
   ) => {
     try {
-      const authReq =
-        req as Request & {
-          user?: AuthTokenPayload;
-        };
-
-      const userId =
-        authReq.user?.userId;
-
-      if (!userId) {
+      if (!req.user?.userId) {
         return res.status(401).json({
-          message:
-            "Authentication required",
+          message: "Authentication required",
         });
       }
 
-      const user =
-        await User.findById(
-          userId
-        );
+      const user = await User.findById(
+        req.user.userId
+      );
 
       if (!user) {
         return res.status(404).json({
-          message:
-            "User not found",
+          message: "User not found",
         });
       }
 
-      const {
-        name,
-        phone,
-        city,
-        bio,
-        yearOfStudy,
-        semester,
-        studentId,
-        profilePicture,
-        email,
-      } = req.body;
+      if (!user.isActive) {
+        return res.status(403).json({
+          message:
+            "Your account has been disabled",
+        });
+      }
 
-      // ==================================================
-      // EMAIL
-      // ==================================================
-      //
-      // Email is intentionally NOT changed here.
-      // It will be changed through OTP verification.
-      //
+      /*
+       * Name
+       */
+      if (req.body.name !== undefined) {
+        const name = normalizeString(
+          req.body.name
+        );
 
+        if (!name) {
+          return res.status(400).json({
+            message: "Name cannot be empty",
+          });
+        }
+
+        if (name.length < 2) {
+          return res.status(400).json({
+            message:
+              "Name must contain at least 2 characters",
+          });
+        }
+
+        if (name.length > 100) {
+          return res.status(400).json({
+            message:
+              "Name cannot exceed 100 characters",
+          });
+        }
+
+        user.name = name;
+      }
+
+      /*
+       * Phone
+       */
+      if (req.body.phone !== undefined) {
+        const phone =
+          normalizeString(
+            req.body.phone
+          );
+
+        if (
+          phone &&
+          phone.length > 20
+        ) {
+          return res.status(400).json({
+            message:
+              "Phone number is too long",
+          });
+        }
+
+        user.phone = phone;
+      }
+
+      /*
+       * City
+       */
+      if (req.body.city !== undefined) {
+        const city =
+          normalizeString(
+            req.body.city
+          );
+
+        if (
+          city &&
+          city.length > 100
+        ) {
+          return res.status(400).json({
+            message:
+              "City name is too long",
+          });
+        }
+
+        user.city = city;
+      }
+
+      /*
+       * Bio
+       */
+      if (req.body.bio !== undefined) {
+        const bio =
+          normalizeString(
+            req.body.bio
+          );
+
+        if (
+          bio &&
+          bio.length > 500
+        ) {
+          return res.status(400).json({
+            message:
+              "Bio cannot exceed 500 characters",
+          });
+        }
+
+        user.bio = bio;
+      }
+
+      /*
+       * Profile picture
+       *
+       * For now this accepts a URL/string.
+       * Actual image upload can be added later.
+       */
       if (
-        typeof email === "string" &&
-        email
-          .trim()
-          .toLowerCase() !==
-          user.email.toLowerCase()
+        req.body.profilePicture !==
+        undefined
+      ) {
+        const profilePicture =
+          normalizeString(
+            req.body.profilePicture
+          );
+
+        if (
+          profilePicture &&
+          profilePicture.length > 2000
+        ) {
+          return res.status(400).json({
+            message:
+              "Profile picture URL is too long",
+          });
+        }
+
+        user.profilePicture =
+          profilePicture || null;
+      }
+
+      /*
+       * Academic fields are intentionally controlled
+       * more strictly.
+       *
+       * Students should not be able to change their
+       * student ID, degree, year or semester through
+       * the normal profile update endpoint.
+       *
+       * These can be managed by the instructor/admin.
+       */
+
+      /*
+       * Email is also intentionally NOT changed here.
+       *
+       * Email changes should use a separate OTP
+       * verification flow.
+       */
+      if (
+        req.body.email !== undefined &&
+        req.body.email !== user.email
       ) {
         return res.status(400).json({
           message:
-            "Email changes require OTP verification.",
+            "Email changes require OTP verification",
         });
       }
 
-      // ==================================================
-      // NAME
-      // ==================================================
-
-      if (
-        typeof name === "string"
-      ) {
-        const cleanedName =
-          name.trim();
-
-        if (!cleanedName) {
-          return res.status(400).json({
-            message:
-              "Name cannot be empty.",
-          });
-        }
-
-        if (
-          cleanedName.length > 100
-        ) {
-          return res.status(400).json({
-            message:
-              "Name cannot exceed 100 characters.",
-          });
-        }
-
-        user.name =
-          cleanedName;
-      }
-
-      // ==================================================
-      // PHONE
-      // ==================================================
-
-      if (
-        typeof phone === "string"
-      ) {
-        user.phone =
-          phone.trim();
-      }
-
-      // ==================================================
-      // CITY
-      // ==================================================
-
-      if (
-        typeof city === "string"
-      ) {
-        user.city =
-          city.trim();
-      }
-
-      // ==================================================
-      // BIO
-      // ==================================================
-
-      if (
-        typeof bio === "string"
-      ) {
-        const cleanedBio =
-          bio.trim();
-
-        if (
-          cleanedBio.length > 500
-        ) {
-          return res.status(400).json({
-            message:
-              "About me cannot exceed 500 characters.",
-          });
-        }
-
-        user.bio =
-          cleanedBio;
-      }
-
-      // ==================================================
-      // YEAR
-      // ==================================================
-
-      if (
-        yearOfStudy !== undefined &&
-        yearOfStudy !== null &&
-        yearOfStudy !== ""
-      ) {
-        const year =
-          Number(yearOfStudy);
-
-        if (
-          !Number.isInteger(year) ||
-          year < 1 ||
-          year > 3
-        ) {
-          return res.status(400).json({
-            message:
-              "Please select a valid BCA year.",
-          });
-        }
-
-        user.yearOfStudy =
-          year;
-      }
-
-      // ==================================================
-      // SEMESTER
-      // ==================================================
-
-      if (
-        semester !== undefined &&
-        semester !== null &&
-        semester !== ""
-      ) {
-        const selectedSemester =
-          Number(semester);
-
-        if (
-          !Number.isInteger(
-            selectedSemester
-          ) ||
-          selectedSemester < 1 ||
-          selectedSemester > 6
-        ) {
-          return res.status(400).json({
-            message:
-              "Please select a valid semester.",
-          });
-        }
-
-        user.semester =
-          selectedSemester;
-      }
-
-      // ==================================================
-      // STUDENT ID
-      // ==================================================
-
-      if (
-        typeof studentId ===
-        "string"
-      ) {
-        const cleanedStudentId =
-          studentId.trim();
-
-        if (
-          cleanedStudentId &&
-          user.role === "student"
-        ) {
-          const existingStudent =
-            await User.findOne({
-              studentId:
-                cleanedStudentId,
-
-              _id: {
-                $ne: user._id,
-              },
-            });
-
-          if (existingStudent) {
-            return res.status(409).json({
-              message:
-                "This student ID is already in use.",
-            });
-          }
-
-          user.studentId =
-            cleanedStudentId;
-        }
-      }
-
-      // ==================================================
-      // PROFILE PICTURE
-      // ==================================================
-
-      if (
-        typeof profilePicture ===
-        "string"
-      ) {
-        // Allow removing the picture
-        if (
-          profilePicture === ""
-        ) {
-          user.profilePicture =
-            "";
-        } else {
-          // Make sure it is an image data URL
-          if (
-            !profilePicture.startsWith(
-              "data:image/"
-            )
-          ) {
-            return res.status(400).json({
-              message:
-                "Invalid profile picture format.",
-            });
-          }
-
-          // Prevent very large images
-          if (
-            profilePicture.length >
-            3_000_000
-          ) {
-            return res.status(400).json({
-              message:
-                "Profile picture is too large. Please choose an image below 2 MB.",
-            });
-          }
-
-          user.profilePicture =
-            profilePicture;
-        }
-      }
-
-      // ==================================================
-      // SAVE
-      // ==================================================
-
       await user.save();
-
-      // ==================================================
-      // RESPONSE
-      // ==================================================
 
       return res.status(200).json({
         message:
-          "Profile updated successfully.",
-
-        user: {
-          id: user._id.toString(),
-          _id: user._id.toString(),
-
-          name: user.name,
-          email: user.email,
-          role: user.role,
-
-          degree:
-            user.degree || "BCA",
-
-          yearOfStudy:
-            user.yearOfStudy,
-
-          semester:
-            user.semester,
-
-          studentId:
-            user.studentId || "",
-
-          phone:
-            user.phone || "",
-
-          city:
-            user.city || "",
-
-          bio:
-            user.bio || "",
-
-          profilePicture:
-            user.profilePicture || "",
-
-          isActive:
-            user.isActive,
-        },
+          "Profile updated successfully",
+        user: sanitizeUser(user),
       });
     } catch (error) {
       console.error(
-        "Update profile error:",
+        "PUT /api/profile/me error:",
         error
       );
 
       return res.status(500).json({
         message:
-          "Failed to update profile",
+          "Failed to update your profile",
       });
     }
   }

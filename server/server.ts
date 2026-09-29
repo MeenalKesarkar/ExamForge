@@ -4,13 +4,24 @@
 
 import dns from "node:dns";
 
-// MongoDB Atlas SRV DNS workaround
+// ======================================================
+// MONGODB ATLAS SRV DNS
+// ======================================================
+
 dns.setServers([
   "8.8.8.8",
   "8.8.4.4",
 ]);
 
+// ======================================================
+// ENVIRONMENT
+// ======================================================
+
 import "dotenv/config";
+
+// ======================================================
+// EXPRESS
+// ======================================================
 
 import express, {
   Request,
@@ -18,19 +29,37 @@ import express, {
   NextFunction,
 } from "express";
 
+// ======================================================
+// MIDDLEWARE
+// ======================================================
+
 import cors from "cors";
 import cookieParser from "cookie-parser";
+
+// ======================================================
+// DATABASE
+// ======================================================
+
 import mongoose from "mongoose";
+
+// ======================================================
+// ROUTES
+// ======================================================
 
 import authRoutes from "./routes/authRoutes";
 import profileRoutes from "./routes/profileRoutes";
 import examRoutes from "./routes/examRoutes";
 import attemptRoutes from "./routes/attemptRoutes";
+import questionRoutes from "./routes/questionRoutes";
+
+// ======================================================
+// APP
+// ======================================================
 
 const app = express();
 
 // ======================================================
-// CONFIG
+// CONFIGURATION
 // ======================================================
 
 const PORT = Number(
@@ -45,7 +74,7 @@ const FRONTEND_URL =
   "http://localhost:5173";
 
 // ======================================================
-// ENV CHECK
+// ENVIRONMENT CHECK
 // ======================================================
 
 if (!MONGO_URI) {
@@ -63,6 +92,7 @@ if (!MONGO_URI) {
 app.use(
   cors({
     origin: FRONTEND_URL,
+
     credentials: true,
 
     methods: [
@@ -100,13 +130,15 @@ app.use(
 );
 
 // ======================================================
-// COOKIES
+// COOKIE PARSER
 // ======================================================
 
-app.use(cookieParser());
+app.use(
+  cookieParser()
+);
 
 // ======================================================
-// LOGGER
+// REQUEST LOGGER
 // ======================================================
 
 app.use(
@@ -124,59 +156,97 @@ app.use(
 );
 
 // ======================================================
-// HEALTH
+// ROOT HEALTH CHECK
 // ======================================================
 
 app.get(
   "/",
-  (_req: Request, res: Response) => {
+  (
+    _req: Request,
+    res: Response
+  ) => {
     return res.status(200).json({
       message:
         "ExamForge API is running",
+
       status: "OK",
+
       timestamp:
         new Date().toISOString(),
     });
   }
 );
 
+// ======================================================
+// API HEALTH CHECK
+// ======================================================
+
 app.get(
   "/api",
-  (_req: Request, res: Response) => {
+  (
+    _req: Request,
+    res: Response
+  ) => {
     return res.status(200).json({
       message:
         "ExamForge API is running",
+
       status: "OK",
     });
   }
 );
 
 // ======================================================
-// ROUTES
+// API ROUTES
 // ======================================================
+
+// ------------------------------------------------------
+// Authentication
+// ------------------------------------------------------
 
 app.use(
   "/api/auth",
   authRoutes
 );
 
+// ------------------------------------------------------
+// Student / Instructor profiles
+// ------------------------------------------------------
+
 app.use(
   "/api/profile",
   profileRoutes
 );
+
+// ------------------------------------------------------
+// Exams
+// ------------------------------------------------------
 
 app.use(
   "/api/exams",
   examRoutes
 );
 
+// ------------------------------------------------------
+// Attempts
+// ------------------------------------------------------
+
 app.use(
   "/api/attempts",
   attemptRoutes
 );
 
+// ------------------------------------------------------
+// Question Bank
+// ------------------------------------------------------
+
+app.use(
+  "/api/questions",
+  questionRoutes
+);
+
 // ======================================================
-// API 404
+// API 404 HANDLER
 // ======================================================
 
 app.use(
@@ -188,14 +258,18 @@ app.use(
     return res.status(404).json({
       message:
         "API endpoint not found",
-      method: req.method,
-      path: req.originalUrl,
+
+      method:
+        req.method,
+
+      path:
+        req.originalUrl,
     });
   }
 );
 
 // ======================================================
-// GLOBAL ERROR
+// GLOBAL ERROR HANDLER
 // ======================================================
 
 app.use(
@@ -228,7 +302,7 @@ app.use(
 );
 
 // ======================================================
-// DATABASE
+// MONGODB CONNECTION
 // ======================================================
 
 const connectDatabase =
@@ -241,9 +315,15 @@ const connectDatabase =
       await mongoose.connect(
         MONGO_URI as string,
         {
-          serverSelectionTimeoutMS: 15000,
-          connectTimeoutMS: 15000,
-          socketTimeoutMS: 45000,
+          serverSelectionTimeoutMS:
+            15000,
+
+          connectTimeoutMS:
+            15000,
+
+          socketTimeoutMS:
+            45000,
+
           family: 4,
         }
       );
@@ -260,7 +340,10 @@ const connectDatabase =
         `MongoDB host: ${mongoose.connection.host}`
       );
 
-      // Very useful check
+      // ------------------------------------------------
+      // Verify expected database
+      // ------------------------------------------------
+
       if (
         mongoose.connection.name !==
         "ExamForge"
@@ -271,57 +354,143 @@ const connectDatabase =
       }
     } catch (error) {
       console.error(
-        "❌ MongoDB connection failed:",
+        "❌ MongoDB connection failed:"
+      );
+
+      console.error(
         error
       );
+
+      // ------------------------------------------------
+      // Helpful DNS error information
+      // ------------------------------------------------
+
+      if (
+        error instanceof Error
+      ) {
+        const message =
+          error.message;
+
+        if (
+          message.includes(
+            "querySrv"
+          ) ||
+          message.includes(
+            "ECONNREFUSED"
+          ) ||
+          message.includes(
+            "ENOTFOUND"
+          )
+        ) {
+          console.error("");
+          console.error(
+            "MongoDB Atlas DNS resolution failed."
+          );
+
+          console.error(
+            "The application is using Google DNS:"
+          );
+
+          console.error(
+            "8.8.8.8 / 8.8.4.4"
+          );
+
+          console.error("");
+        }
+      }
 
       process.exit(1);
     }
   };
 
 // ======================================================
-// START
+// START SERVER
 // ======================================================
 
 const startServer =
   async (): Promise<void> => {
+    // --------------------------------------------------
+    // Connect to MongoDB first
+    // --------------------------------------------------
+
     await connectDatabase();
+
+    // --------------------------------------------------
+    // Start Express
+    // --------------------------------------------------
 
     app.listen(
       PORT,
       () => {
         console.log("");
+
         console.log(
-          "======================================"
+          "=========================================="
         );
+
         console.log(
-          "🚀 EXAMFORGE BACKEND"
+          "🚀 EXAMFORGE BACKEND STARTED"
         );
+
         console.log(
-          "======================================"
+          "=========================================="
         );
+
         console.log(
           `Server: http://localhost:${PORT}`
         );
+
         console.log(
           `Frontend: ${FRONTEND_URL}`
         );
+
         console.log(
           `API: http://localhost:${PORT}/api`
         );
+
         console.log(
           `Database: ${mongoose.connection.name}`
         );
+
+        console.log("");
+
         console.log(
-          "======================================"
+          "Available APIs:"
         );
+
+        console.log(
+          `Auth:      http://localhost:${PORT}/api/auth`
+        );
+
+        console.log(
+          `Profile:   http://localhost:${PORT}/api/profile`
+        );
+
+        console.log(
+          `Exams:     http://localhost:${PORT}/api/exams`
+        );
+
+        console.log(
+          `Attempts:  http://localhost:${PORT}/api/attempts`
+        );
+
+        console.log(
+          `Questions: http://localhost:${PORT}/api/questions`
+        );
+
+        console.log("");
+
+        console.log(
+          "=========================================="
+        );
+
         console.log("");
       }
     );
   };
 
 // ======================================================
-// SHUTDOWN
+// GRACEFUL SHUTDOWN
 // ======================================================
 
 const gracefulShutdown =
@@ -330,6 +499,10 @@ const gracefulShutdown =
   ): Promise<void> => {
     console.log(
       `\n${signal} received.`
+    );
+
+    console.log(
+      "Closing MongoDB connection..."
     );
 
     try {
@@ -350,27 +523,37 @@ const gracefulShutdown =
     }
   };
 
+// ======================================================
+// PROCESS SIGNALS
+// ======================================================
+
 process.on(
   "SIGINT",
   () => {
-    void gracefulShutdown("SIGINT");
+    void gracefulShutdown(
+      "SIGINT"
+    );
   }
 );
 
 process.on(
   "SIGTERM",
   () => {
-    void gracefulShutdown("SIGTERM");
+    void gracefulShutdown(
+      "SIGTERM"
+    );
   }
 );
 
 // ======================================================
-// PROCESS ERRORS
+// UNHANDLED PROMISE REJECTION
 // ======================================================
 
 process.on(
   "unhandledRejection",
-  (reason) => {
+  (
+    reason
+  ) => {
     console.error(
       "Unhandled Promise Rejection:",
       reason
@@ -378,9 +561,15 @@ process.on(
   }
 );
 
+// ======================================================
+// UNCAUGHT EXCEPTION
+// ======================================================
+
 process.on(
   "uncaughtException",
-  (error) => {
+  (
+    error
+  ) => {
     console.error(
       "Uncaught Exception:",
       error
@@ -389,11 +578,13 @@ process.on(
 );
 
 // ======================================================
-// RUN
+// RUN SERVER
 // ======================================================
 
 startServer().catch(
-  (error) => {
+  (
+    error
+  ) => {
     console.error(
       "❌ Fatal startup error:",
       error

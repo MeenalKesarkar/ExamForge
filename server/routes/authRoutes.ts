@@ -1,276 +1,243 @@
-// ======================================================
-// EXAMFORGE - AUTH ROUTES
-// ======================================================
-
-import express, {
-  Request,
-  Response,
-} from "express";
-
+import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
-
-import jwt, {
-  JwtPayload,
-  SignOptions,
-} from "jsonwebtoken";
-
+import jwt, { JwtPayload } from "jsonwebtoken";
 import crypto from "crypto";
-
-import nodemailer from "nodemailer";
 
 import User from "../models/User";
 import PasswordReset from "../models/PasswordReset";
 
-const router = express.Router();
+const router = Router();
 
-// ======================================================
-// CONFIG
-// ======================================================
+/* =========================================================
+   Constants
+========================================================= */
 
-const ACCESS_TOKEN_COOKIE =
-  "examforge_access_token";
+const ACCESS_TOKEN_COOKIE = "examforge_access_token";
+const REFRESH_TOKEN_COOKIE = "examforge_refresh_token";
 
-const REFRESH_TOKEN_COOKIE =
-  "examforge_refresh_token";
+const ACCESS_TOKEN_SECRET =
+  process.env.ACCESS_TOKEN_SECRET || "";
+
+const REFRESH_TOKEN_SECRET =
+  process.env.REFRESH_TOKEN_SECRET ||
+  process.env.ACCESS_TOKEN_SECRET ||
+  "";
+
+const ACCESS_TOKEN_EXPIRES_IN =
+  process.env.ACCESS_TOKEN_EXPIRES_IN || "15m";
+
+const REFRESH_TOKEN_EXPIRES_IN =
+  process.env.REFRESH_TOKEN_EXPIRES_IN || "7d";
+
+const OTP_EXPIRY_MINUTES = 10;
+const MAX_OTP_ATTEMPTS = 5;
+
+/* =========================================================
+   Types
+========================================================= */
+
+interface TokenPayload extends JwtPayload {
+  userId: string;
+  role: "student" | "instructor";
+}
+
+/* =========================================================
+   Cookie options
+========================================================= */
 
 const isProduction =
   process.env.NODE_ENV === "production";
 
-const accessSecret =
-  process.env.ACCESS_TOKEN_SECRET;
+const baseCookieOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? ("none" as const) : ("lax" as const),
+  path: "/",
+};
 
-const refreshSecret =
-  process.env.REFRESH_TOKEN_SECRET;
+/* =========================================================
+   Helpers
+========================================================= */
 
-if (!accessSecret) {
-  console.error(
-    "❌ ACCESS_TOKEN_SECRET is missing from .env"
-  );
-}
-
-if (!refreshSecret) {
-  console.error(
-    "❌ REFRESH_TOKEN_SECRET is missing from .env"
-  );
-}
-
-// ======================================================
-// SMTP
-// ======================================================
-
-const transporter =
-  nodemailer.createTransport({
-    host:
-      process.env.SMTP_HOST ||
-      "smtp.gmail.com",
-
-    port: Number(
-      process.env.SMTP_PORT ||
-        587
-    ),
-
-    secure:
-      process.env.SMTP_SECURE ===
-      "true",
-
-    auth: {
-      user:
-        process.env.SMTP_USER,
-      pass:
-        process.env.SMTP_PASS,
-    },
-  });
-
-// ======================================================
-// TOKEN TYPE
-// ======================================================
-
-interface TokenPayload
-  extends JwtPayload {
-  userId: string;
-  role:
-    | "student"
-    | "instructor";
-}
-
-// ======================================================
-// USER RESPONSE
-// ======================================================
-
-const serializeUser = (
-  user: any
+const createAccessToken = (
+  userId: string,
+  role: "student" | "instructor"
 ) => {
+  if (!ACCESS_TOKEN_SECRET) {
+    throw new Error(
+      "ACCESS_TOKEN_SECRET is not configured"
+    );
+  }
+
+  return jwt.sign(
+    {
+      userId,
+      role,
+    },
+    ACCESS_TOKEN_SECRET,
+    {
+      expiresIn: ACCESS_TOKEN_EXPIRES_IN as jwt.SignOptions["expiresIn"],
+    }
+  );
+};
+
+const createRefreshToken = (
+  userId: string,
+  role: "student" | "instructor"
+) => {
+  if (!REFRESH_TOKEN_SECRET) {
+    throw new Error(
+      "REFRESH_TOKEN_SECRET is not configured"
+    );
+  }
+
+  return jwt.sign(
+    {
+      userId,
+      role,
+    },
+    REFRESH_TOKEN_SECRET,
+    {
+      expiresIn:
+        REFRESH_TOKEN_EXPIRES_IN as jwt.SignOptions["expiresIn"],
+    }
+  );
+};
+
+const setAuthCookies = (
+  res: Response,
+  userId: string,
+  role: "student" | "instructor"
+) => {
+  const accessToken = createAccessToken(
+    userId,
+    role
+  );
+
+  const refreshToken = createRefreshToken(
+    userId,
+    role
+  );
+
+  res.cookie(
+    ACCESS_TOKEN_COOKIE,
+    accessToken,
+    {
+      ...baseCookieOptions,
+      maxAge: 15 * 60 * 1000,
+    }
+  );
+
+  res.cookie(
+    REFRESH_TOKEN_COOKIE,
+    refreshToken,
+    {
+      ...baseCookieOptions,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    }
+  );
+};
+
+const clearAuthCookies = (res: Response) => {
+  res.clearCookie(
+    ACCESS_TOKEN_COOKIE,
+    baseCookieOptions
+  );
+
+  res.clearCookie(
+    REFRESH_TOKEN_COOKIE,
+    baseCookieOptions
+  );
+};
+
+const sanitizeUser = (user: any) => {
   return {
-    id: String(user._id),
+    id: user._id.toString(),
     name: user.name,
     email: user.email,
     role: user.role,
 
-    degree:
-      user.degree || "BCA",
+    degree: user.degree,
+    yearOfStudy: user.yearOfStudy,
+    semester: user.semester,
+    studentId: user.studentId,
 
-    yearOfStudy:
-      user.yearOfStudy,
-
-    semester:
-      user.semester,
-
-    studentId:
-      user.studentId || "",
-
-    phone:
-      user.phone || "",
-
-    city:
-      user.city || "",
-
-    bio:
-      user.bio || "",
-
-    profilePicture:
-      user.profilePicture || "",
+    phone: user.phone,
+    city: user.city,
+    bio: user.bio,
+    profilePicture: user.profilePicture || null,
   };
 };
 
-// ======================================================
-// ACCESS TOKEN
-// ======================================================
+const normalizeEmail = (email: unknown) => {
+  return typeof email === "string"
+    ? email.trim().toLowerCase()
+    : "";
+};
 
-const createAccessToken =
-  (user: any): string => {
-    if (!accessSecret) {
-      throw new Error(
-        "ACCESS_TOKEN_SECRET is not configured."
-      );
-    }
+const generateOTP = () => {
+  return crypto
+    .randomInt(100000, 1000000)
+    .toString();
+};
 
-    return jwt.sign(
-      {
-        userId: String(
-          user._id
-        ),
-        role: user.role,
-      },
+const hashOTP = (otp: string) => {
+  return crypto
+    .createHash("sha256")
+    .update(otp)
+    .digest("hex");
+};
 
-      accessSecret,
-
-      {
-        expiresIn:
-          (process.env
-            .ACCESS_TOKEN_EXPIRES_IN ||
-            "1d") as SignOptions["expiresIn"],
-      }
-    );
-  };
-
-// ======================================================
-// REFRESH TOKEN
-// ======================================================
-
-const createRefreshToken =
-  (user: any): string => {
-    if (!refreshSecret) {
-      throw new Error(
-        "REFRESH_TOKEN_SECRET is not configured."
-      );
-    }
-
-    return jwt.sign(
-      {
-        userId: String(
-          user._id
-        ),
-        role: user.role,
-      },
-
-      refreshSecret,
-
-      {
-        expiresIn:
-          (process.env
-            .REFRESH_TOKEN_EXPIRES_IN ||
-            "3d") as SignOptions["expiresIn"],
-      }
-    );
-  };
-
-// ======================================================
-// OTP
-// ======================================================
-
-const generateOTP =
-  (): string => {
-    return crypto
-      .randomInt(
-        100000,
-        1000000
-      )
-      .toString();
-  };
-
-const generateResetToken =
-  (): string => {
-    return crypto
-      .randomBytes(32)
-      .toString("hex");
-  };
-
-// ======================================================
-// LOGIN
-// ======================================================
+/* =========================================================
+   LOGIN
+   POST /api/auth/login
+========================================================= */
 
 router.post(
   "/login",
-  async (
-    req: Request,
-    res: Response
-  ) => {
+  async (req: Request, res: Response) => {
     try {
-      const {
-        email,
-        password,
-        rememberMe = false,
-      } = req.body;
+      const email = normalizeEmail(
+        req.body.email
+      );
 
-      if (
-        typeof email !==
-          "string" ||
-        typeof password !==
-          "string"
-      ) {
+      const password =
+        typeof req.body.password === "string"
+          ? req.body.password
+          : "";
+
+      if (!email || !password) {
         return res.status(400).json({
           message:
-            "Email and password are required.",
+            "Email and password are required",
         });
       }
 
-      const normalizedEmail =
-        email.trim().toLowerCase();
+      const user = await User.findOne({
+        email,
+      });
 
-      const user =
-        await User.findOne({
-          email:
-            normalizedEmail,
-        });
-
-      // --------------------------------------------------
-      // Do not reveal which part is wrong
-      // --------------------------------------------------
-
+      /*
+       * Do not reveal whether the email exists.
+       */
       if (!user) {
         return res.status(401).json({
           message:
-            "Invalid email or password.",
+            "Invalid email or password",
         });
       }
 
       if (!user.isActive) {
         return res.status(403).json({
           message:
-            "Your account is inactive. Please contact your instructor or campus administrator.",
+            "Your account has been disabled. Please contact your instructor or campus administrator.",
         });
       }
 
+      /*
+       * Only approved users exist in the system.
+       * There is intentionally no public registration route.
+       */
       const passwordMatches =
         await bcrypt.compare(
           password,
@@ -280,529 +247,424 @@ router.post(
       if (!passwordMatches) {
         return res.status(401).json({
           message:
-            "Invalid email or password.",
+            "Invalid email or password",
         });
       }
 
-      const accessToken =
-        createAccessToken(user);
-
-      const refreshToken =
-        createRefreshToken(user);
-
-      // --------------------------------------------------
-      // ACCESS COOKIE
-      // --------------------------------------------------
-
-      res.cookie(
-        ACCESS_TOKEN_COOKIE,
-        accessToken,
-        {
-          httpOnly: true,
-          secure: isProduction,
-
-          sameSite:
-            isProduction
-              ? "strict"
-              : "lax",
-
-          maxAge:
-            24 *
-            60 *
-            60 *
-            1000,
-
-          path: "/",
-        }
-      );
-
-      // --------------------------------------------------
-      // REFRESH COOKIE
-      // --------------------------------------------------
-
-      const refreshOptions: any = {
-        httpOnly: true,
-        secure: isProduction,
-
-        sameSite:
-          isProduction
-            ? "strict"
-            : "lax",
-
-        path: "/api/auth",
-      };
-
-      if (rememberMe) {
-        refreshOptions.maxAge =
-          3 *
-          24 *
-          60 *
-          60 *
-          1000;
-      }
-
-      res.cookie(
-        REFRESH_TOKEN_COOKIE,
-        refreshToken,
-        refreshOptions
+      setAuthCookies(
+        res,
+        user._id.toString(),
+        user.role
       );
 
       return res.status(200).json({
-        message:
-          "Login successful.",
-
-        user:
-          serializeUser(user),
-
-        rememberMe:
-          Boolean(rememberMe),
+        message: "Login successful",
+        user: sanitizeUser(user),
       });
     } catch (error) {
       console.error(
-        "Login error:",
+        "POST /api/auth/login error:",
         error
       );
 
       return res.status(500).json({
         message:
-          "Unable to complete login. Please try again.",
+          "Unable to complete login",
       });
     }
   }
 );
 
-// ======================================================
-// REFRESH
-// ======================================================
+/* =========================================================
+   REFRESH SESSION
+   POST /api/auth/refresh
+========================================================= */
 
 router.post(
   "/refresh",
-  async (
-    req: Request,
-    res: Response
-  ) => {
+  async (req: Request, res: Response) => {
     try {
-      if (!refreshSecret) {
-        return res.status(500).json({
-          message:
-            "Authentication configuration is missing.",
-        });
-      }
+      const refreshToken =
+        req.cookies?.[REFRESH_TOKEN_COOKIE];
 
-      const token =
-        req.cookies?.[
-          REFRESH_TOKEN_COOKIE
-        ];
-
-      if (!token) {
+      if (!refreshToken) {
         return res.status(401).json({
           message:
-            "No active session.",
+            "Refresh session not found",
         });
       }
 
-      let decoded:
-        TokenPayload;
-
-      try {
-        decoded =
-          jwt.verify(
-            token,
-            refreshSecret
-          ) as TokenPayload;
-      } catch {
-        return res.status(401).json({
-          message:
-            "Your session has expired.",
-        });
-      }
-
-      const user =
-        await User.findById(
-          decoded.userId
+      if (!REFRESH_TOKEN_SECRET) {
+        console.error(
+          "REFRESH_TOKEN_SECRET is not configured"
         );
 
-      if (!user) {
+        return res.status(500).json({
+          message:
+            "Authentication configuration error",
+        });
+      }
+
+      let decoded: TokenPayload;
+
+      try {
+        decoded = jwt.verify(
+          refreshToken,
+          REFRESH_TOKEN_SECRET
+        ) as TokenPayload;
+      } catch {
+        clearAuthCookies(res);
+
         return res.status(401).json({
           message:
-            "User account no longer exists.",
+            "Refresh session is invalid or expired",
+        });
+      }
+
+      if (
+        !decoded.userId ||
+        !decoded.role
+      ) {
+        clearAuthCookies(res);
+
+        return res.status(401).json({
+          message:
+            "Invalid refresh session",
+        });
+      }
+
+      const user = await User.findById(
+        decoded.userId
+      ).select(
+        "_id name email role degree yearOfStudy semester studentId phone city bio profilePicture isActive"
+      );
+
+      if (!user) {
+        clearAuthCookies(res);
+
+        return res.status(401).json({
+          message: "User not found",
         });
       }
 
       if (!user.isActive) {
+        clearAuthCookies(res);
+
         return res.status(403).json({
           message:
-            "Your account is inactive.",
+            "Your account has been disabled",
         });
       }
 
-      const accessToken =
-        createAccessToken(user);
-
-      res.cookie(
-        ACCESS_TOKEN_COOKIE,
-        accessToken,
-        {
-          httpOnly: true,
-          secure: isProduction,
-
-          sameSite:
-            isProduction
-              ? "strict"
-              : "lax",
-
-          maxAge:
-            24 *
-            60 *
-            60 *
-            1000,
-
-          path: "/",
-        }
+      /*
+       * Rotate both tokens.
+       *
+       * This extends the active session while the
+       * refresh token itself is still valid.
+       */
+      setAuthCookies(
+        res,
+        user._id.toString(),
+        user.role
       );
 
       return res.status(200).json({
         message:
-          "Session refreshed.",
-
-        user:
-          serializeUser(user),
+          "Session refreshed successfully",
+        user: sanitizeUser(user),
       });
     } catch (error) {
       console.error(
-        "Refresh error:",
+        "POST /api/auth/refresh error:",
         error
       );
 
+      clearAuthCookies(res);
+
       return res.status(500).json({
         message:
-          "Unable to refresh session.",
+          "Unable to refresh session",
       });
     }
   }
 );
 
-// ======================================================
-// LOGOUT
-// ======================================================
+/* =========================================================
+   LOGOUT
+   POST /api/auth/logout
+========================================================= */
 
 router.post(
   "/logout",
-  async (
-    _req: Request,
-    res: Response
-  ) => {
-    res.clearCookie(
-      ACCESS_TOKEN_COOKIE,
-      {
-        httpOnly: true,
-        secure: isProduction,
+  async (_req: Request, res: Response) => {
+    try {
+      clearAuthCookies(res);
 
-        sameSite:
-          isProduction
-            ? "strict"
-            : "lax",
+      return res.status(200).json({
+        message: "Logged out successfully",
+      });
+    } catch (error) {
+      console.error(
+        "POST /api/auth/logout error:",
+        error
+      );
 
-        path: "/",
-      }
-    );
-
-    res.clearCookie(
-      REFRESH_TOKEN_COOKIE,
-      {
-        httpOnly: true,
-        secure: isProduction,
-
-        sameSite:
-          isProduction
-            ? "strict"
-            : "lax",
-
-        path: "/api/auth",
-      }
-    );
-
-    return res.status(200).json({
-      message:
-        "Logged out successfully.",
-    });
+      return res.status(500).json({
+        message:
+          "Unable to complete logout",
+      });
+    }
   }
 );
 
-// ======================================================
-// FORGOT PASSWORD - SEND OTP
-// ======================================================
+/* =========================================================
+   SEND FORGOT PASSWORD OTP
+   POST /api/auth/forgot-password/send-otp
+========================================================= */
 
 router.post(
   "/forgot-password/send-otp",
-  async (
-    req: Request,
-    res: Response
-  ) => {
+  async (req: Request, res: Response) => {
     try {
-      const email =
+      const email = normalizeEmail(
         req.body.email
-          ?.trim()
-          .toLowerCase();
+      );
 
       if (!email) {
         return res.status(400).json({
-          message:
-            "Email address is required.",
+          message: "Email is required",
         });
       }
 
-      const user =
-        await User.findOne({
-          email,
-        });
+      const user = await User.findOne({
+        email,
+      });
 
-      if (!user) {
+      /*
+       * Do not expose whether an account exists.
+       */
+      if (!user || !user.isActive) {
         return res.status(200).json({
           message:
-            "If an account exists with this email, an OTP has been sent.",
+            "If an account exists for this email, an OTP has been sent.",
         });
       }
 
+      /*
+       * Remove previous password-reset requests
+       * for this email.
+       */
       await PasswordReset.deleteMany({
         email,
       });
 
-      const otp =
-        generateOTP();
+      const otp = generateOTP();
 
-      const otpHash =
-        await bcrypt.hash(
-          otp,
-          10
-        );
+      const otpHash = hashOTP(otp);
 
-      const expiryMinutes =
-        Number(
-          process.env
-            .PASSWORD_RESET_OTP_EXPIRES_MINUTES ||
-            10
-        );
+      const expiresAt = new Date(
+        Date.now() +
+          OTP_EXPIRY_MINUTES * 60 * 1000
+      );
 
       await PasswordReset.create({
         userId: user._id,
         email,
         otpHash,
-
-        expiresAt:
-          new Date(
-            Date.now() +
-              expiryMinutes *
-                60 *
-                1000
-          ),
-
+        expiresAt,
         attempts: 0,
         verified: false,
+        verifiedAt: null,
+        resetToken: null,
+        resetTokenExpiresAt: null,
       });
 
-      await transporter.sendMail({
-        from:
-          process.env.SMTP_FROM ||
-          process.env.SMTP_USER,
-
-        to: email,
-
-        subject:
-          "ExamForge Password Reset OTP",
-
-        text:
-          `Your ExamForge password reset OTP is ${otp}. It expires in ${expiryMinutes} minutes.`,
-
-        html: `
-          <div style="font-family:Arial,sans-serif;background:#f1f5f9;padding:40px">
-            <div style="max-width:560px;margin:auto;background:#ffffff;border-radius:20px;padding:32px">
-              <h1 style="color:#4f46e5">ExamForge</h1>
-              <p>Password reset verification</p>
-
-              <div style="font-size:34px;font-weight:bold;letter-spacing:10px;text-align:center;background:#eef2ff;padding:20px;border-radius:14px;color:#4338ca">
-                ${otp}
-              </div>
-
-              <p style="color:#64748b">
-                This OTP expires in ${expiryMinutes} minutes.
-              </p>
-            </div>
-          </div>
-        `,
-      });
+      /*
+       * DEVELOPMENT MODE
+       *
+       * We don't have an email provider connected yet.
+       * Therefore the OTP is logged on the backend.
+       *
+       * In production, replace this with an email service.
+       */
+      console.log(
+        `ExamForge password reset OTP for ${email}: ${otp}`
+      );
 
       return res.status(200).json({
         message:
-          "If an account exists with this email, an OTP has been sent.",
+          "If an account exists for this email, an OTP has been sent.",
       });
     } catch (error) {
       console.error(
-        "Send OTP error:",
+        "POST /api/auth/forgot-password/send-otp error:",
         error
       );
 
       return res.status(500).json({
         message:
-          "Unable to send OTP.",
+          "Unable to send password reset OTP",
       });
     }
   }
 );
 
-// ======================================================
-// VERIFY OTP
-// ======================================================
+/* =========================================================
+   VERIFY FORGOT PASSWORD OTP
+   POST /api/auth/forgot-password/verify-otp
+========================================================= */
 
 router.post(
   "/forgot-password/verify-otp",
-  async (
-    req: Request,
-    res: Response
-  ) => {
+  async (req: Request, res: Response) => {
     try {
-      const email =
+      const email = normalizeEmail(
         req.body.email
-          ?.trim()
-          .toLowerCase();
+      );
 
       const otp =
-        req.body.otp?.trim();
+        typeof req.body.otp === "string"
+          ? req.body.otp.trim()
+          : "";
 
       if (!email || !otp) {
         return res.status(400).json({
           message:
-            "Email and OTP are required.",
+            "Email and OTP are required",
         });
       }
 
-      const reset =
+      if (!/^\d{6}$/.test(otp)) {
+        return res.status(400).json({
+          message:
+            "OTP must contain exactly 6 digits",
+        });
+      }
+
+      const resetRequest =
         await PasswordReset.findOne({
           email,
+        }).sort({
+          createdAt: -1,
         });
 
-      if (!reset) {
+      if (!resetRequest) {
         return res.status(400).json({
           message:
-            "OTP is invalid or expired.",
+            "Invalid or expired OTP",
         });
       }
 
       if (
-        new Date() >
-        reset.expiresAt
+        resetRequest.expiresAt.getTime() <
+        Date.now()
       ) {
         await PasswordReset.deleteOne({
-          _id: reset._id,
+          _id: resetRequest._id,
         });
 
         return res.status(400).json({
           message:
-            "OTP has expired. Request a new one.",
+            "OTP has expired. Please request a new OTP.",
         });
       }
 
       if (
-        reset.attempts >= 5
+        resetRequest.attempts >=
+        MAX_OTP_ATTEMPTS
       ) {
-        await PasswordReset.deleteOne({
-          _id: reset._id,
-        });
-
         return res.status(429).json({
           message:
-            "Too many incorrect attempts. Request a new OTP.",
+            "Too many incorrect OTP attempts. Please request a new OTP.",
         });
       }
 
-      const valid =
-        await bcrypt.compare(
-          otp,
-          reset.otpHash
-        );
+      if (resetRequest.verified) {
+        return res.status(200).json({
+          message:
+            "OTP has already been verified",
+          verified: true,
+          resetToken:
+            resetRequest.resetToken,
+        });
+      }
 
-      if (!valid) {
-        reset.attempts += 1;
+      const incomingHash = hashOTP(otp);
 
-        await reset.save();
+      if (
+        incomingHash !== resetRequest.otpHash
+      ) {
+        resetRequest.attempts += 1;
+
+        await resetRequest.save();
 
         return res.status(400).json({
           message:
-            "Invalid OTP.",
-          attemptsRemaining:
-            Math.max(
-              5 -
-                reset.attempts,
-              0
-            ),
+            "Invalid OTP",
+          attemptsRemaining: Math.max(
+            0,
+            MAX_OTP_ATTEMPTS -
+              resetRequest.attempts
+          ),
         });
       }
 
       const resetToken =
-        generateResetToken();
+        crypto.randomBytes(32).toString("hex");
 
-      reset.verified =
-        true;
-
-      reset.verifiedAt =
-        new Date();
-
-      reset.resetToken =
-        await bcrypt.hash(
-          resetToken,
-          10
-        );
-
-      reset.resetTokenExpiresAt =
+      resetRequest.verified = true;
+      resetRequest.verifiedAt = new Date();
+      resetRequest.resetToken =
+        resetToken;
+      resetRequest.resetTokenExpiresAt =
         new Date(
-          Date.now() +
-            10 *
-              60 *
-              1000
+          Date.now() + 10 * 60 * 1000
         );
 
-      await reset.save();
+      await resetRequest.save();
 
       return res.status(200).json({
         message:
-          "OTP verified successfully.",
+          "OTP verified successfully",
+        verified: true,
         resetToken,
       });
     } catch (error) {
       console.error(
-        "Verify OTP error:",
+        "POST /api/auth/forgot-password/verify-otp error:",
         error
       );
 
       return res.status(500).json({
         message:
-          "Unable to verify OTP.",
+          "Unable to verify OTP",
       });
     }
   }
 );
 
-// ======================================================
-// RESET PASSWORD
-// ======================================================
+/* =========================================================
+   RESET PASSWORD
+   POST /api/auth/forgot-password/reset
+========================================================= */
 
 router.post(
   "/forgot-password/reset",
-  async (
-    req: Request,
-    res: Response
-  ) => {
+  async (req: Request, res: Response) => {
     try {
-      const email =
+      const email = normalizeEmail(
         req.body.email
-          ?.trim()
-          .toLowerCase();
+      );
 
       const resetToken =
-        req.body.resetToken;
+        typeof req.body.resetToken === "string"
+          ? req.body.resetToken.trim()
+          : "";
 
       const newPassword =
-        req.body.newPassword;
+        typeof req.body.newPassword === "string"
+          ? req.body.newPassword
+          : "";
 
       if (
         !email ||
@@ -811,130 +673,104 @@ router.post(
       ) {
         return res.status(400).json({
           message:
-            "All password reset fields are required.",
+            "Email, reset token and new password are required",
         });
       }
 
-      if (
-        newPassword.length < 8
-      ) {
+      if (newPassword.length < 8) {
         return res.status(400).json({
           message:
-            "Password must contain at least 8 characters.",
+            "Password must contain at least 8 characters",
         });
       }
 
-      const reset =
+      const resetRequest =
         await PasswordReset.findOne({
           email,
+          resetToken,
           verified: true,
         });
 
-      if (!reset) {
+      if (!resetRequest) {
         return res.status(400).json({
           message:
-            "Password reset session is invalid or expired.",
+            "Invalid or expired password reset session",
         });
       }
 
       if (
-        !reset.resetTokenExpiresAt ||
-        new Date() >
-          reset.resetTokenExpiresAt
+        !resetRequest.resetTokenExpiresAt ||
+        resetRequest.resetTokenExpiresAt.getTime() <
+          Date.now()
       ) {
-        await PasswordReset.deleteOne({
-          _id: reset._id,
-        });
-
         return res.status(400).json({
           message:
-            "Password reset session has expired.",
+            "Password reset session has expired. Please start again.",
         });
       }
 
-      if (!reset.resetToken) {
+      if (!resetRequest.userId) {
         return res.status(400).json({
           message:
-            "Invalid password reset session.",
+            "Invalid password reset request",
         });
       }
 
-      const valid =
-        await bcrypt.compare(
-          resetToken,
-          reset.resetToken
-        );
-
-      if (!valid) {
-        return res.status(400).json({
-          message:
-            "Invalid password reset session.",
-        });
-      }
-
-      const user =
-        await User.findOne({
-          email,
-        });
+      const user = await User.findById(
+        resetRequest.userId
+      );
 
       if (!user) {
-        return res.status(400).json({
-          message:
-            "Unable to reset password.",
+        return res.status(404).json({
+          message: "User not found",
         });
       }
 
-      user.passwordHash =
+      if (!user.isActive) {
+        return res.status(403).json({
+          message:
+            "Your account has been disabled",
+        });
+      }
+
+      const passwordHash =
         await bcrypt.hash(
           newPassword,
           12
         );
 
+      user.passwordHash = passwordHash;
+
       await user.save();
 
+      /*
+       * Delete the reset request after successful
+       * password change so the same token cannot
+       * be reused.
+       */
       await PasswordReset.deleteOne({
-        _id: reset._id,
+        _id: resetRequest._id,
       });
 
-      res.clearCookie(
-        ACCESS_TOKEN_COOKIE,
-        {
-          httpOnly: true,
-          secure: isProduction,
-          sameSite:
-            isProduction
-              ? "strict"
-              : "lax",
-          path: "/",
-        }
-      );
-
-      res.clearCookie(
-        REFRESH_TOKEN_COOKIE,
-        {
-          httpOnly: true,
-          secure: isProduction,
-          sameSite:
-            isProduction
-              ? "strict"
-              : "lax",
-          path: "/api/auth",
-        }
-      );
+      /*
+       * Clear any existing login session.
+       * User must log in again with the new password.
+       */
+      clearAuthCookies(res);
 
       return res.status(200).json({
         message:
-          "Password reset successfully.",
+          "Password reset successfully. Please log in with your new password.",
       });
     } catch (error) {
       console.error(
-        "Reset password error:",
+        "POST /api/auth/forgot-password/reset error:",
         error
       );
 
       return res.status(500).json({
         message:
-          "Unable to reset password.",
+          "Unable to reset password",
       });
     }
   }

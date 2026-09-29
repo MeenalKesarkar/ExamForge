@@ -1,164 +1,255 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, {
+  Document,
+  Schema,
+} from "mongoose";
 
-export interface IAttempt extends Document {
+/* =========================================================
+   TYPES
+========================================================= */
+
+export type AttemptStatus =
+  | "IN_PROGRESS"
+  | "SUBMITTED"
+  | "EVALUATED"
+  | "TIMED_OUT";
+
+export interface IAttempt
+  extends Document {
   studentId: mongoose.Types.ObjectId;
   examId: mongoose.Types.ObjectId;
+
+  /*
+   * The exact questions selected when the
+   * attempt starts.
+   *
+   * These must never be regenerated on refresh.
+   */
   questionIds: mongoose.Types.ObjectId[];
-  answers: Record<string, string[]>;
+
+  /*
+   * Stored progressively as the student answers.
+   *
+   * Example:
+   *
+   * {
+   *   "questionId1": ["JavaScript"],
+   *   "questionId2": ["A", "C"]
+   * }
+   */
+  answers: Record<
+    string,
+    string[]
+  >;
+
+  /*
+   * Server-owned timer.
+   */
   startTime: Date;
-  endTime: Date | null;
-  submittedAt: Date | null;
-  status:
-    | "IN_PROGRESS"
-    | "SUBMITTED"
-    | "EVALUATED"
-    | "TIMED_OUT";
-  score: number;
-  totalMarks: number;
-  percentage: number;
-  passed: boolean;
+  endTime: Date;
+
+  submittedAt:
+    | Date
+    | null;
+
+  status: AttemptStatus;
+
+  /*
+   * Final calculated result.
+   */
+  score?: number;
+  totalMarks?: number;
+  percentage?: number;
+  passed?: boolean;
+
+  /*
+   * Optional lightweight anti-cheating
+   * tab-switch counter.
+   */
   tabSwitchCount: number;
-  violations: {
-    event:
-      | "TAB_SWITCH"
-      | "WINDOW_BLUR"
-      | "FULLSCREEN_EXIT"
-      | "COPY_PASTE_ATTEMPT";
-    timestamp: Date;
-  }[];
+
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const attemptSchema = new Schema<IAttempt>(
-  {
-    studentId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: [
-        true,
-        "Student reference (studentId) is required",
-      ],
-      index: true,
-    },
+/* =========================================================
+   SCHEMA
+========================================================= */
 
-    examId: {
-      type: Schema.Types.ObjectId,
-      ref: "Exam",
-      required: [
-        true,
-        "Exam reference (examId) is required",
-      ],
-      index: true,
-    },
+const attemptSchema =
+  new Schema<IAttempt>(
+    {
+      /* ---------------------------------------------------
+         STUDENT
+      --------------------------------------------------- */
 
-    questionIds: [
-      {
+      studentId: {
         type: Schema.Types.ObjectId,
-        ref: "Question",
+        ref: "User",
+        required: true,
+        index: true,
       },
-    ],
 
-    answers: {
-      type: Schema.Types.Mixed,
-      default: {},
-    },
+      /* ---------------------------------------------------
+         EXAM
+      --------------------------------------------------- */
 
-    startTime: {
-      type: Date,
-      default: Date.now,
-    },
-
-    endTime: {
-      type: Date,
-      default: null,
-    },
-
-    submittedAt: {
-      type: Date,
-      default: null,
-    },
-
-    status: {
-      type: String,
-      enum: [
-        "IN_PROGRESS",
-        "SUBMITTED",
-        "EVALUATED",
-        "TIMED_OUT",
-      ],
-      default: "IN_PROGRESS",
-      index: true,
-    },
-
-    score: {
-      type: Number,
-      default: 0,
-    },
-
-    totalMarks: {
-      type: Number,
-      default: 0,
-    },
-
-    percentage: {
-      type: Number,
-      default: 0,
-    },
-
-    passed: {
-      type: Boolean,
-      default: false,
-    },
-
-    tabSwitchCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    violations: [
-      {
-        event: {
-          type: String,
-          enum: [
-            "TAB_SWITCH",
-            "WINDOW_BLUR",
-            "FULLSCREEN_EXIT",
-            "COPY_PASTE_ATTEMPT",
-          ],
-        },
-
-        timestamp: {
-          type: Date,
-          default: Date.now,
-        },
+      examId: {
+        type: Schema.Types.ObjectId,
+        ref: "Exam",
+        required: true,
+        index: true,
       },
-    ],
-  },
-  {
-    collection: "attempts",
-    timestamps: true,
-  }
-);
 
-// Allows multiple attempts for the same student/exam.
+      /* ---------------------------------------------------
+         FIXED QUESTION SET
+      --------------------------------------------------- */
+
+      questionIds: {
+        type: [
+          {
+            type: Schema.Types.ObjectId,
+            ref: "Question",
+          },
+        ],
+        required: true,
+        default: [],
+      },
+
+      /* ---------------------------------------------------
+         ANSWERS
+      --------------------------------------------------- */
+
+      answers: {
+        type: Schema.Types.Mixed,
+        default: {},
+      },
+
+      /* ---------------------------------------------------
+         SERVER TIMER
+      --------------------------------------------------- */
+
+      startTime: {
+        type: Date,
+        required: true,
+      },
+
+      endTime: {
+        type: Date,
+        required: true,
+      },
+
+      /* ---------------------------------------------------
+         SUBMISSION
+      --------------------------------------------------- */
+
+      submittedAt: {
+        type: Date,
+        default: null,
+      },
+
+      /* ---------------------------------------------------
+         STATUS
+      --------------------------------------------------- */
+
+      status: {
+        type: String,
+        enum: [
+          "IN_PROGRESS",
+          "SUBMITTED",
+          "EVALUATED",
+          "TIMED_OUT",
+        ],
+        required: true,
+        default: "IN_PROGRESS",
+        index: true,
+      },
+
+      /* ---------------------------------------------------
+         RESULT
+      --------------------------------------------------- */
+
+      score: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      totalMarks: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      percentage: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 100,
+      },
+
+      passed: {
+        type: Boolean,
+        default: false,
+      },
+
+      /* ---------------------------------------------------
+         TAB SWITCH COUNT
+      --------------------------------------------------- */
+
+      tabSwitchCount: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+    },
+
+    {
+      collection: "attempts",
+      timestamps: true,
+    }
+  );
+
+/* =========================================================
+   INDEXES
+========================================================= */
+
+/*
+ * Used for:
+ *
+ * - finding a student's attempts for an exam
+ * - checking allowed attempts
+ * - resuming an existing attempt
+ */
 attemptSchema.index({
   studentId: 1,
   examId: 1,
 });
 
+/*
+ * Useful for instructor result pages.
+ */
 attemptSchema.index({
   examId: 1,
   status: 1,
 });
 
+/*
+ * Useful for student history.
+ */
 attemptSchema.index({
   studentId: 1,
   submittedAt: -1,
 });
 
-const Attempt = mongoose.model<IAttempt>(
-  "Attempt",
-  attemptSchema
-);
+/* =========================================================
+   MODEL
+========================================================= */
+
+const Attempt =
+  mongoose.models.Attempt ||
+  mongoose.model<IAttempt>(
+    "Attempt",
+    attemptSchema
+  );
 
 export default Attempt;

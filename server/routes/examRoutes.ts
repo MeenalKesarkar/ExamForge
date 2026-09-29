@@ -1,428 +1,480 @@
-import express, {
-  Request,
-  Response,
-} from "express";
-
+import { Router, Response } from "express";
 import mongoose from "mongoose";
 
 import Exam from "../models/Exam";
-import Question from "../models/Question";
 import Attempt from "../models/Attempt";
+import Question from "../models/Question";
 import User from "../models/User";
 
-const router = express.Router();
+import {
+  requireAuth,
+  AuthenticatedRequest,
+} from "../middleware/authMiddleware";
 
-// ======================================================
-// TYPES
-// ======================================================
+const router = Router();
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 interface CreateExamBody {
   title?: string;
   subject?: string;
   degree?: string;
-
   yearOfStudy?: number | string;
   semester?: number | string;
-
   duration?: number | string;
   questionCount?: number | string;
-
   totalMarks?: number | string;
   passingMarks?: number | string;
-
-  allowedAttempts?: number | string;
-
   negativeMarking?: boolean;
   negativePenalty?: number | string;
-
+  allowedAttempts?: number | string;
+  startDate?: string;
+  endDate?: string;
   instructions?: string | string[];
-
+  shuffleQuestions?: boolean;
+  shuffleOptions?: boolean;
   published?: boolean;
-
-  // FIX:
-  // createdBy was missing from this interface.
-  createdBy?: string;
 }
 
-interface StudentExamQuery {
-  studentId?: string;
+interface QuestionIdDocument {
+  _id: mongoose.Types.ObjectId;
 }
 
-// ======================================================
-// HELPERS
-// ======================================================
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const getExamId = (
+  value: string | string[] | undefined
+): string => {
+  if (Array.isArray(value)) {
+    return value[0] ?? "";
+  }
+
+  return value ?? "";
+};
 
 const isValidObjectId = (
   value: string
 ): boolean => {
-  return mongoose.Types.ObjectId.isValid(
-    value
-  );
+  return mongoose.Types.ObjectId.isValid(value);
 };
 
-// ======================================================
-// NORMALIZE INSTRUCTIONS
-// ======================================================
+const requireInstructorAccess = (
+  req: AuthenticatedRequest
+): boolean => {
+  return req.user?.role === "instructor";
+};
 
-const toInstructionArray = (
-  value: unknown
+const requireStudentAccess = (
+  req: AuthenticatedRequest
+): boolean => {
+  return req.user?.role === "student";
+};
+
+const normalizeInstructions = (
+  instructions:
+    | string
+    | string[]
+    | undefined
 ): string[] => {
-  if (Array.isArray(value)) {
-    return value
-      .filter(
-        (item): item is string =>
-          typeof item === "string"
-      )
-      .map((item) =>
-        item.trim()
-      )
-      .filter(
-        (item) => item.length > 0
-      );
+  if (Array.isArray(instructions)) {
+    return instructions
+      .map((item) => String(item).trim())
+      .filter(Boolean);
   }
 
   if (
-    typeof value === "string"
+    typeof instructions === "string" &&
+    instructions.trim()
   ) {
-    return value
-      .split(/\r?\n/)
-      .map((item) =>
-        item.trim()
-      )
-      .filter(
-        (item) => item.length > 0
-      );
+    return [instructions.trim()];
   }
 
   return [];
 };
 
-// ======================================================
-// GET PUBLISHED EXAMS
-// ======================================================
+const parseOptionalNumber = (
+  value: unknown
+): number | undefined => {
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed)
+    ? parsed
+    : undefined;
+};
+
+const parseBoolean = (
+  value: unknown,
+  defaultValue = false
+): boolean => {
+  if (value === undefined || value === null) {
+    return defaultValue;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return value.toLowerCase() === "true";
+  }
+
+  return Boolean(value);
+};
+
+/* =========================================================
+   GET INSTRUCTOR EXAMS
+   GET /api/exams/instructor
+========================================================= */
+
+router.get(
+  "/instructor",
+  requireAuth,
+  async (
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    try {
+      if (!requireInstructorAccess(req)) {
+        return res.status(403).json({
+          message: "Instructor access required",
+        });
+      }
+
+      const instructorId = req.user?.userId;
+
+      if (
+        !instructorId ||
+        !isValidObjectId(instructorId)
+      ) {
+        return res.status(401).json({
+          message:
+            "Invalid instructor authentication",
+        });
+      }
+
+      const exams = await Exam.find({
+        createdBy:
+          new mongoose.Types.ObjectId(
+            instructorId
+          ),
+      })
+        .sort({
+          createdAt: -1,
+        })
+        .lean();
+
+      return res.status(200).json({
+        exams,
+      });
+    } catch (error) {
+      console.error(
+        "Get instructor exams error:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Failed to load instructor exams",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   GET PUBLISHED EXAMS
+   GET /api/exams/published
+
+   Only published exams are returned.
+
+   Student academic information is intentionally NOT used
+   only as a frontend filter. Eligibility is checked again
+   when the student starts the exam.
+========================================================= */
 
 router.get(
   "/published",
+  requireAuth,
   async (
-    _req: Request,
+    req: AuthenticatedRequest,
     res: Response
   ) => {
     try {
-      const exams =
-        await Exam.find({
-          published: true,
-        })
-          .select(
-            [
-              "_id",
-              "title",
-              "subject",
-              "degree",
-              "yearOfStudy",
-              "semester",
-              "duration",
-              "questionCount",
-              "totalMarks",
-              "passingMarks",
-              "negativeMarking",
-              "negativePenalty",
-              "allowedAttempts",
-              "instructions",
-              "published",
-              "startDate",
-              "endDate",
-              "createdBy",
-              "createdAt",
-              "updatedAt",
-            ].join(" ")
-          )
-          .sort({
-            createdAt: -1,
-          });
-
-      return res.status(200).json(
-        exams
-      );
-    } catch (error) {
-      console.error(
-        "Error fetching published exams:",
-        error
-      );
-
-      return res.status(500).json({
-        message:
-          "Failed to fetch published exams",
-      });
-    }
-  }
-);
-
-// ======================================================
-// GET ALL EXAMS
-// ======================================================
-//
-// GET /api/exams
-//
-// Used by instructor dashboard.
-//
-// ======================================================
-
-router.get(
-  "/",
-  async (
-    req: Request,
-    res: Response
-  ) => {
-    try {
-      const instructorId =
-        req.query.createdBy as
-          | string
-          | undefined;
-
-      const filter: Record<
-        string,
-        unknown
-      > = {};
-
-      if (
-        instructorId &&
-        isValidObjectId(
-          instructorId
-        )
-      ) {
-        filter.createdBy =
-          instructorId;
+      if (!requireStudentAccess(req)) {
+        return res.status(403).json({
+          message:
+            "Student access required",
+        });
       }
 
-      const exams =
-        await Exam.find(
-          filter
+      const exams = await Exam.find({
+        published: true,
+      })
+        .select(
+          [
+            "_id",
+            "title",
+            "subject",
+            "degree",
+            "yearOfStudy",
+            "semester",
+            "duration",
+            "questionCount",
+            "totalMarks",
+            "passingMarks",
+            "negativeMarking",
+            "negativePenalty",
+            "allowedAttempts",
+            "startDate",
+            "endDate",
+            "instructions",
+            "shuffleQuestions",
+            "shuffleOptions",
+            "published",
+            "createdAt",
+          ].join(" ")
         )
-          .select(
-            [
-              "_id",
-              "title",
-              "subject",
-              "degree",
-              "yearOfStudy",
-              "semester",
-              "duration",
-              "questionCount",
-              "totalMarks",
-              "passingMarks",
-              "allowedAttempts",
-              "negativeMarking",
-              "negativePenalty",
-              "instructions",
-              "published",
-              "startDate",
-              "endDate",
-              "createdBy",
-              "createdAt",
-              "updatedAt",
-            ].join(" ")
-          )
-          .sort({
-            createdAt: -1,
-          });
+        .sort({
+          createdAt: -1,
+        })
+        .lean();
 
-      return res.status(200).json(
-        exams
-      );
+      return res.status(200).json({
+        exams,
+      });
     } catch (error) {
       console.error(
-        "Error fetching exams:",
+        "Get published exams error:",
         error
       );
 
       return res.status(500).json({
         message:
-          "Failed to fetch exams",
+          "Failed to load published exams",
       });
     }
   }
 );
 
-// ======================================================
-// CREATE EXAM
-// ======================================================
-//
-// POST /api/exams
-//
-// ======================================================
+/* =========================================================
+   GET SINGLE EXAM
+   GET /api/exams/:examId
+========================================================= */
+
+router.get(
+  "/:examId",
+  requireAuth,
+  async (
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    try {
+      const examId = getExamId(
+        req.params.examId
+      );
+
+      if (!isValidObjectId(examId)) {
+        return res.status(400).json({
+          message: "Invalid exam ID",
+        });
+      }
+
+      const exam = await Exam.findById(
+        examId
+      ).lean();
+
+      if (!exam) {
+        return res.status(404).json({
+          message: "Exam not found",
+        });
+      }
+
+      /* ---------------------------------------------------
+         INSTRUCTOR
+      --------------------------------------------------- */
+
+      if (requireInstructorAccess(req)) {
+        if (
+          exam.createdBy?.toString() !==
+          req.user?.userId
+        ) {
+          return res.status(403).json({
+            message:
+              "You are not allowed to access this exam",
+          });
+        }
+
+        return res.status(200).json({
+          exam,
+        });
+      }
+
+      /* ---------------------------------------------------
+         STUDENT
+      --------------------------------------------------- */
+
+      if (requireStudentAccess(req)) {
+        if (!exam.published) {
+          return res.status(403).json({
+            message:
+              "This exam is not available",
+          });
+        }
+
+        return res.status(200).json({
+          exam,
+        });
+      }
+
+      return res.status(403).json({
+        message: "Access denied",
+      });
+    } catch (error) {
+      console.error(
+        "Get single exam error:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Failed to load exam",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   CREATE EXAM
+   POST /api/exams
+========================================================= */
 
 router.post(
   "/",
+  requireAuth,
   async (
-    req: Request,
+    req: AuthenticatedRequest & {
+      body: CreateExamBody;
+    },
     res: Response
   ) => {
     try {
-      const body =
-        req.body as CreateExamBody;
+      if (!requireInstructorAccess(req)) {
+        return res.status(403).json({
+          message:
+            "Instructor access required",
+        });
+      }
 
-      // --------------------------------------------------
-      // Basic values
-      // --------------------------------------------------
+      const {
+        title,
+        subject,
+        degree,
+        yearOfStudy,
+        semester,
+        duration,
+        questionCount,
+        totalMarks,
+        passingMarks,
+        negativeMarking,
+        negativePenalty,
+        allowedAttempts,
+        startDate,
+        endDate,
+        instructions,
+        shuffleQuestions,
+        shuffleOptions,
+        published,
+      } = req.body;
 
-      const title =
-        typeof body.title ===
-        "string"
-          ? body.title.trim()
-          : "";
+      /* ---------------------------------------------------
+         TITLE
+      --------------------------------------------------- */
 
-      const subject =
-        typeof body.subject ===
-        "string"
-          ? body.subject.trim()
-          : "";
-
-      const degree =
-        typeof body.degree ===
-        "string"
-          ? body.degree
-              .trim()
-              .toUpperCase()
-          : "BCA";
-
-      // --------------------------------------------------
-      // Numbers
-      // --------------------------------------------------
-
-      const yearOfStudy =
-        Number(
-          body.yearOfStudy
-        );
-
-      const semester =
-        Number(
-          body.semester
-        );
-
-      const duration =
-        Number(
-          body.duration
-        );
-
-      const questionCount =
-        Number(
-          body.questionCount
-        );
-
-      const totalMarks =
-        Number(
-          body.totalMarks
-        );
-
-      const passingMarks =
-        Number(
-          body.passingMarks
-        );
-
-      const allowedAttempts =
-        Number(
-          body.allowedAttempts ??
-            2
-        );
-
-      const negativePenalty =
-        Number(
-          body.negativePenalty ??
-            0
-        );
-
-      // --------------------------------------------------
-      // Boolean
-      // --------------------------------------------------
-
-      const negativeMarking =
-        body.negativeMarking ===
-        true;
-
-      const published =
-        body.published ===
-        true;
-
-      // --------------------------------------------------
-      // Instructions
-      // --------------------------------------------------
-
-      const instructions: string[] =
-        toInstructionArray(
-          body.instructions
-        );
-
-      // --------------------------------------------------
-      // Validate title
-      // --------------------------------------------------
-
-      if (!title) {
+      if (
+        typeof title !== "string" ||
+        !title.trim()
+      ) {
         return res.status(400).json({
           message:
             "Exam title is required",
         });
       }
 
-      if (
-        title.length > 200
-      ) {
+      if (title.trim().length > 200) {
         return res.status(400).json({
           message:
             "Exam title cannot exceed 200 characters",
         });
       }
 
-      // --------------------------------------------------
-      // Validate subject
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         SUBJECT
+      --------------------------------------------------- */
 
-      if (!subject) {
+      const parsedSubject =
+        typeof subject === "string"
+          ? subject.trim()
+          : "";
+
+      if (parsedSubject.length > 150) {
         return res.status(400).json({
           message:
-            "Subject is required",
+            "Subject cannot exceed 150 characters",
         });
       }
 
-      // --------------------------------------------------
-      // Validate degree
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         DEGREE
+      --------------------------------------------------- */
+
+      const parsedDegree =
+        typeof degree === "string" &&
+        degree.trim()
+          ? degree.trim()
+          : "BCA";
+
+      /* ---------------------------------------------------
+         YEAR
+      --------------------------------------------------- */
+
+      const parsedYear =
+        parseOptionalNumber(yearOfStudy);
 
       if (
-        degree !== "BCA"
+        parsedYear !== undefined &&
+        (!Number.isInteger(parsedYear) ||
+          parsedYear < 1 ||
+          parsedYear > 3)
       ) {
         return res.status(400).json({
           message:
-            "ExamForge currently supports BCA examinations only",
+            "Year of study must be 1, 2 or 3",
         });
       }
 
-      // --------------------------------------------------
-      // Validate year
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         SEMESTER
+      --------------------------------------------------- */
+
+      const parsedSemester =
+        parseOptionalNumber(semester);
 
       if (
-        !Number.isInteger(
-          yearOfStudy
-        ) ||
-        yearOfStudy < 1 ||
-        yearOfStudy > 3
-      ) {
-        return res.status(400).json({
-          message:
-            "Year of study must be 1, 2, or 3",
-        });
-      }
-
-      // --------------------------------------------------
-      // Validate semester
-      // --------------------------------------------------
-
-      if (
-        !Number.isInteger(
-          semester
-        ) ||
-        semester < 1 ||
-        semester > 6
+        parsedSemester !== undefined &&
+        (!Number.isInteger(parsedSemester) ||
+          parsedSemester < 1 ||
+          parsedSemester > 6)
       ) {
         return res.status(400).json({
           message:
@@ -430,15 +482,16 @@ router.post(
         });
       }
 
-      // --------------------------------------------------
-      // Validate duration
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         DURATION
+      --------------------------------------------------- */
+
+      const parsedDuration =
+        Number(duration);
 
       if (
-        !Number.isFinite(
-          duration
-        ) ||
-        duration <= 0
+        !Number.isFinite(parsedDuration) ||
+        parsedDuration <= 0
       ) {
         return res.status(400).json({
           message:
@@ -446,15 +499,21 @@ router.post(
         });
       }
 
-      // --------------------------------------------------
-      // Validate question count
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         QUESTION COUNT
+      --------------------------------------------------- */
+
+      const parsedQuestionCount =
+        Number(questionCount);
 
       if (
-        !Number.isInteger(
-          questionCount
+        !Number.isFinite(
+          parsedQuestionCount
         ) ||
-        questionCount <= 0
+        !Number.isInteger(
+          parsedQuestionCount
+        ) ||
+        parsedQuestionCount <= 0
       ) {
         return res.status(400).json({
           message:
@@ -462,15 +521,22 @@ router.post(
         });
       }
 
-      // --------------------------------------------------
-      // Validate total marks
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         TOTAL MARKS
+      --------------------------------------------------- */
+
+      const parsedTotalMarks =
+        totalMarks !== undefined &&
+        totalMarks !== null &&
+        totalMarks !== ""
+          ? Number(totalMarks)
+          : parsedQuestionCount;
 
       if (
         !Number.isFinite(
-          totalMarks
+          parsedTotalMarks
         ) ||
-        totalMarks <= 0
+        parsedTotalMarks <= 0
       ) {
         return res.status(400).json({
           message:
@@ -478,259 +544,226 @@ router.post(
         });
       }
 
-      // --------------------------------------------------
-      // Validate passing marks
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         PASSING MARKS
+      --------------------------------------------------- */
+
+      const parsedPassingMarks =
+        passingMarks !== undefined &&
+        passingMarks !== null &&
+        passingMarks !== ""
+          ? Number(passingMarks)
+          : Math.ceil(
+              parsedTotalMarks * 0.5
+            );
 
       if (
         !Number.isFinite(
-          passingMarks
+          parsedPassingMarks
         ) ||
-        passingMarks < 0
+        parsedPassingMarks < 0 ||
+        parsedPassingMarks >
+          parsedTotalMarks
       ) {
         return res.status(400).json({
           message:
-            "Passing marks cannot be negative",
+            "Passing marks must be between 0 and total marks",
         });
       }
 
-      if (
-        passingMarks >
-        totalMarks
-      ) {
-        return res.status(400).json({
-          message:
-            "Passing marks cannot exceed total marks",
-        });
-      }
+      /* ---------------------------------------------------
+         NEGATIVE MARKING
+      --------------------------------------------------- */
 
-      // --------------------------------------------------
-      // Validate attempts
-      // --------------------------------------------------
-
-      if (
-        !Number.isInteger(
-          allowedAttempts
-        ) ||
-        allowedAttempts < 1 ||
-        allowedAttempts > 3
-      ) {
-        return res.status(400).json({
-          message:
-            "Allowed attempts must be between 1 and 3",
-        });
-      }
-
-      // --------------------------------------------------
-      // Validate negative marking
-      // --------------------------------------------------
-
-      if (
-        negativeMarking &&
-        (
-          !Number.isFinite(
-            negativePenalty
-          ) ||
-          negativePenalty <= 0
-        )
-      ) {
-        return res.status(400).json({
-          message:
-            "Negative marking penalty must be greater than 0",
-        });
-      }
-
-      // --------------------------------------------------
-      // Validate createdBy
-      // --------------------------------------------------
-
-      if (
-        !body.createdBy
-      ) {
-        return res.status(400).json({
-          message:
-            "Instructor ID is required",
-        });
-      }
-
-      if (
-        !isValidObjectId(
-          body.createdBy
-        )
-      ) {
-        return res.status(400).json({
-          message:
-            "Invalid instructor ID",
-        });
-      }
-
-      // --------------------------------------------------
-      // Verify instructor
-      // --------------------------------------------------
-
-      const instructor =
-        await User.findOne({
-          _id:
-            body.createdBy,
-          role:
-            "instructor",
-        }).select(
-          "_id name email role isActive"
+      const parsedNegativeMarking =
+        parseBoolean(
+          negativeMarking,
+          false
         );
 
-      if (!instructor) {
-        return res.status(403).json({
+      const parsedNegativePenalty =
+        negativePenalty !==
+          undefined &&
+        negativePenalty !== null &&
+        negativePenalty !== ""
+          ? Number(negativePenalty)
+          : 0;
+
+      if (
+        !Number.isFinite(
+          parsedNegativePenalty
+        ) ||
+        parsedNegativePenalty < 0
+      ) {
+        return res.status(400).json({
           message:
-            "Only an instructor can create an exam",
+            "Negative marking penalty cannot be negative",
         });
+      }
+
+      /* ---------------------------------------------------
+         ALLOWED ATTEMPTS
+      --------------------------------------------------- */
+
+      const parsedAllowedAttempts =
+        allowedAttempts !== undefined &&
+        allowedAttempts !== null &&
+        allowedAttempts !== ""
+          ? Number(allowedAttempts)
+          : 1;
+
+      if (
+        !Number.isFinite(
+          parsedAllowedAttempts
+        ) ||
+        !Number.isInteger(
+          parsedAllowedAttempts
+        ) ||
+        parsedAllowedAttempts < 1 ||
+        parsedAllowedAttempts > 10
+      ) {
+        return res.status(400).json({
+          message:
+            "Allowed attempts must be between 1 and 10",
+        });
+      }
+
+      /* ---------------------------------------------------
+         DATES
+      --------------------------------------------------- */
+
+      let parsedStartDate:
+        | Date
+        | undefined;
+
+      let parsedEndDate:
+        | Date
+        | undefined;
+
+      if (startDate) {
+        parsedStartDate =
+          new Date(startDate);
+
+        if (
+          Number.isNaN(
+            parsedStartDate.getTime()
+          )
+        ) {
+          return res.status(400).json({
+            message:
+              "Invalid start date",
+          });
+        }
+      }
+
+      if (endDate) {
+        parsedEndDate =
+          new Date(endDate);
+
+        if (
+          Number.isNaN(
+            parsedEndDate.getTime()
+          )
+        ) {
+          return res.status(400).json({
+            message:
+              "Invalid end date",
+          });
+        }
       }
 
       if (
-        instructor.isActive ===
-        false
+        parsedStartDate &&
+        parsedEndDate &&
+        parsedEndDate <=
+          parsedStartDate
       ) {
-        return res.status(403).json({
+        return res.status(400).json({
           message:
-            "Instructor account is inactive",
+            "End date must be after start date",
         });
       }
 
-      // --------------------------------------------------
-      // Create exam
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         CREATE
+      --------------------------------------------------- */
 
-      const exam =
-        await Exam.create({
-          title,
+      const exam = await Exam.create({
+        title: title.trim(),
 
-          subject,
+        subject: parsedSubject,
 
-          degree: "BCA",
+        degree: parsedDegree,
 
-          yearOfStudy,
+        yearOfStudy: parsedYear,
 
-          semester,
+        semester: parsedSemester,
 
-          duration,
+        duration: parsedDuration,
 
-          questionCount,
+        questionCount:
+          parsedQuestionCount,
 
-          totalMarks,
+        totalMarks:
+          parsedTotalMarks,
 
-          passingMarks,
+        passingMarks:
+          parsedPassingMarks,
 
-          negativeMarking,
+        negativeMarking:
+          parsedNegativeMarking,
 
-          negativePenalty:
-            negativeMarking
-              ? negativePenalty
-              : 0,
+        negativePenalty:
+          parsedNegativePenalty,
 
-          instructions,
+        allowedAttempts:
+          parsedAllowedAttempts,
 
-          published,
+        startDate:
+          parsedStartDate,
 
-          allowedAttempts,
+        endDate:
+          parsedEndDate,
 
-          shuffleQuestions:
-            false,
+        instructions:
+          normalizeInstructions(
+            instructions
+          ),
 
-          shuffleOptions:
-            false,
+        shuffleQuestions:
+          parseBoolean(
+            shuffleQuestions,
+            false
+          ),
 
-          createdBy:
-            new mongoose.Types.ObjectId(
-              body.createdBy
-            ),
-        });
+        shuffleOptions:
+          parseBoolean(
+            shuffleOptions,
+            false
+          ),
 
-      // --------------------------------------------------
-      // Response
-      // --------------------------------------------------
+        published:
+          parseBoolean(
+            published,
+            false
+          ),
+
+        createdBy:
+          new mongoose.Types.ObjectId(
+            req.user!.userId
+          ),
+      });
 
       return res.status(201).json({
         message:
           "Exam created successfully",
-
-        exam: {
-          _id:
-            exam._id.toString(),
-
-          title:
-            exam.title,
-
-          subject:
-            exam.subject,
-
-          degree:
-            exam.degree,
-
-          yearOfStudy:
-            exam.yearOfStudy,
-
-          semester:
-            exam.semester,
-
-          duration:
-            exam.duration,
-
-          questionCount:
-            exam.questionCount,
-
-          totalMarks:
-            exam.totalMarks,
-
-          passingMarks:
-            exam.passingMarks,
-
-          allowedAttempts:
-            exam.allowedAttempts,
-
-          negativeMarking:
-            exam.negativeMarking,
-
-          negativePenalty:
-            exam.negativePenalty,
-
-          instructions:
-            exam.instructions,
-
-          published:
-            exam.published,
-
-          createdBy:
-            exam.createdBy.toString(),
-
-          createdAt:
-            exam.createdAt,
-        },
+        exam,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error(
-        "Error creating exam:",
+        "Create exam error:",
         error
       );
-
-      if (
-        error?.name ===
-        "ValidationError"
-      ) {
-        const messages =
-          Object.values(
-            error.errors || {}
-          ).map(
-            (item: any) =>
-              String(
-                item.message
-              )
-          );
-
-        return res.status(400).json({
-          message:
-            messages.join(", ") ||
-            "Invalid exam information",
-        });
-      }
 
       return res.status(500).json({
         message:
@@ -740,32 +773,33 @@ router.post(
   }
 );
 
-// ======================================================
-// GET SINGLE EXAM
-// ======================================================
-//
-// GET /api/exams/:examId
-//
-// ======================================================
+/* =========================================================
+   UPDATE EXAM
+   PUT /api/exams/:examId
+========================================================= */
 
-router.get(
+router.put(
   "/:examId",
+  requireAuth,
   async (
-    req: Request<{
-      examId: string;
-    }>,
+    req: AuthenticatedRequest & {
+      body: CreateExamBody;
+    },
     res: Response
   ) => {
     try {
-      const {
-        examId,
-      } = req.params;
+      if (!requireInstructorAccess(req)) {
+        return res.status(403).json({
+          message:
+            "Instructor access required",
+        });
+      }
 
-      if (
-        !isValidObjectId(
-          examId
-        )
-      ) {
+      const examId = getExamId(
+        req.params.examId
+      );
+
+      if (!isValidObjectId(examId)) {
         return res.status(400).json({
           message:
             "Invalid exam ID",
@@ -773,9 +807,7 @@ router.get(
       }
 
       const exam =
-        await Exam.findById(
-          examId
-        ).lean();
+        await Exam.findById(examId);
 
       if (!exam) {
         return res.status(404).json({
@@ -784,604 +816,495 @@ router.get(
         });
       }
 
-      return res.status(200).json({
-        ...exam,
-
-        instructions:
-          toInstructionArray(
-            exam.instructions
-          ),
-      });
-    } catch (error) {
-      console.error(
-        "Error fetching exam:",
-        error
-      );
-
-      return res.status(500).json({
-        message:
-          "Failed to fetch exam",
-      });
-    }
-  }
-);
-
-// ======================================================
-// START EXAM
-// ======================================================
-//
-// POST /api/exams/:examId/start
-//
-// ======================================================
-
-router.post(
-  "/:examId/start",
-  async (
-    req: Request<{
-      examId: string;
-    }>,
-    res: Response
-  ) => {
-    try {
-      const {
-        examId,
-      } = req.params;
-
-      const body =
-        req.body as StudentExamQuery;
-
-      const studentId =
-        body.studentId;
-
-      // --------------------------------------------------
-      // Validate student
-      // --------------------------------------------------
-
-      if (!studentId) {
-        return res.status(400).json({
-          message:
-            "Student ID is required",
-        });
-      }
+      /* ---------------------------------------------------
+         OWNERSHIP
+      --------------------------------------------------- */
 
       if (
-        !isValidObjectId(
-          studentId
-        )
-      ) {
-        return res.status(400).json({
-          message:
-            "Invalid student ID",
-        });
-      }
-
-      // --------------------------------------------------
-      // Validate exam
-      // --------------------------------------------------
-
-      if (
-        !isValidObjectId(
-          examId
-        )
-      ) {
-        return res.status(400).json({
-          message:
-            "Invalid exam ID",
-        });
-      }
-
-      // --------------------------------------------------
-      // Find published exam
-      // --------------------------------------------------
-
-      const exam =
-        await Exam.findOne({
-          _id: examId,
-          published: true,
-        });
-
-      if (!exam) {
-        return res.status(404).json({
-          message:
-            "Exam not found or not published",
-        });
-      }
-
-      // --------------------------------------------------
-      // Find student
-      // --------------------------------------------------
-
-      const student =
-        await User.findById(
-          studentId
-        ).select(
-          "_id name email role isActive degree yearOfStudy semester"
-        );
-
-      if (!student) {
-        return res.status(404).json({
-          message:
-            "Student not found",
-        });
-      }
-
-      // --------------------------------------------------
-      // Student role
-      // --------------------------------------------------
-
-      if (
-        student.role !==
-        "student"
+        exam.createdBy?.toString() !==
+        req.user?.userId
       ) {
         return res.status(403).json({
           message:
-            "Only students can start an exam",
+            "You are not allowed to modify this exam",
         });
       }
 
-      // --------------------------------------------------
-      // Active account
-      // --------------------------------------------------
+      const body = req.body;
+
+      /* ---------------------------------------------------
+         TITLE
+      --------------------------------------------------- */
+
+      if (body.title !== undefined) {
+        const title =
+          String(body.title).trim();
+
+        if (!title) {
+          return res.status(400).json({
+            message:
+              "Exam title cannot be empty",
+          });
+        }
+
+        if (title.length > 200) {
+          return res.status(400).json({
+            message:
+              "Exam title cannot exceed 200 characters",
+          });
+        }
+
+        exam.title = title;
+      }
+
+      /* ---------------------------------------------------
+         SUBJECT
+      --------------------------------------------------- */
+
+      if (body.subject !== undefined) {
+        const subject =
+          String(body.subject).trim();
+
+        if (subject.length > 150) {
+          return res.status(400).json({
+            message:
+              "Subject cannot exceed 150 characters",
+          });
+        }
+
+        exam.subject = subject;
+      }
+
+      /* ---------------------------------------------------
+         DEGREE
+      --------------------------------------------------- */
+
+      if (body.degree !== undefined) {
+        const degree =
+          String(body.degree).trim();
+
+        if (!degree) {
+          return res.status(400).json({
+            message:
+              "Degree cannot be empty",
+          });
+        }
+
+        exam.degree = degree;
+      }
+
+      /* ---------------------------------------------------
+         YEAR
+      --------------------------------------------------- */
 
       if (
-        student.isActive ===
-        false
+        body.yearOfStudy !== undefined
       ) {
-        return res.status(403).json({
-          message:
-            "Your account is inactive",
-        });
+        const year =
+          Number(body.yearOfStudy);
+
+        if (
+          !Number.isInteger(year) ||
+          year < 1 ||
+          year > 3
+        ) {
+          return res.status(400).json({
+            message:
+              "Year of study must be 1, 2 or 3",
+          });
+        }
+
+        exam.yearOfStudy = year;
       }
 
-      // --------------------------------------------------
-      // Degree eligibility
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         SEMESTER
+      --------------------------------------------------- */
 
       if (
-        exam.degree &&
-        student.degree &&
-        exam.degree.toUpperCase() !==
-          student.degree.toUpperCase()
+        body.semester !== undefined
       ) {
-        return res.status(403).json({
-          message:
-            "You are not eligible for this exam",
-        });
+        const semester =
+          Number(body.semester);
+
+        if (
+          !Number.isInteger(
+            semester
+          ) ||
+          semester < 1 ||
+          semester > 6
+        ) {
+          return res.status(400).json({
+            message:
+              "Semester must be between 1 and 6",
+          });
+        }
+
+        exam.semester = semester;
       }
 
-      // --------------------------------------------------
-      // Year eligibility
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         DURATION
+      --------------------------------------------------- */
 
       if (
-        exam.yearOfStudy &&
-        student.yearOfStudy &&
-        exam.yearOfStudy !==
-          student.yearOfStudy
+        body.duration !== undefined
       ) {
-        return res.status(403).json({
-          message:
-            "This exam is not assigned to your year",
-        });
+        const duration =
+          Number(body.duration);
+
+        if (
+          !Number.isFinite(duration) ||
+          duration <= 0
+        ) {
+          return res.status(400).json({
+            message:
+              "Duration must be greater than 0",
+          });
+        }
+
+        exam.duration = duration;
       }
 
-      // --------------------------------------------------
-      // Semester eligibility
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         QUESTION COUNT
+      --------------------------------------------------- */
 
       if (
-        exam.semester &&
-        student.semester &&
-        exam.semester !==
-          student.semester
+        body.questionCount !== undefined
       ) {
-        return res.status(403).json({
-          message:
-            "This exam is not assigned to your semester",
-        });
+        const questionCount =
+          Number(
+            body.questionCount
+          );
+
+        if (
+          !Number.isInteger(
+            questionCount
+          ) ||
+          questionCount <= 0
+        ) {
+          return res.status(400).json({
+            message:
+              "Question count must be a positive whole number",
+          });
+        }
+
+        exam.questionCount =
+          questionCount;
       }
 
-      // --------------------------------------------------
-      // Exam schedule
-      // --------------------------------------------------
+      /* ---------------------------------------------------
+         TOTAL MARKS
+      --------------------------------------------------- */
 
-      const now =
-        new Date();
+      if (
+        body.totalMarks !== undefined
+      ) {
+        const totalMarks =
+          Number(
+            body.totalMarks
+          );
+
+        if (
+          !Number.isFinite(
+            totalMarks
+          ) ||
+          totalMarks <= 0
+        ) {
+          return res.status(400).json({
+            message:
+              "Total marks must be greater than 0",
+          });
+        }
+
+        exam.totalMarks =
+          totalMarks;
+      }
+
+      /* ---------------------------------------------------
+         PASSING MARKS
+      --------------------------------------------------- */
+
+      if (
+        body.passingMarks !==
+        undefined
+      ) {
+        const passingMarks =
+          Number(
+            body.passingMarks
+          );
+
+        if (
+          !Number.isFinite(
+            passingMarks
+          ) ||
+          passingMarks < 0
+        ) {
+          return res.status(400).json({
+            message:
+              "Passing marks cannot be negative",
+          });
+        }
+
+        exam.passingMarks =
+          passingMarks;
+      }
+
+      /* ---------------------------------------------------
+         NEGATIVE MARKING
+      --------------------------------------------------- */
+
+      if (
+        body.negativeMarking !==
+        undefined
+      ) {
+        exam.negativeMarking =
+          parseBoolean(
+            body.negativeMarking,
+            false
+          );
+      }
+
+      if (
+        body.negativePenalty !==
+        undefined
+      ) {
+        const penalty =
+          Number(
+            body.negativePenalty
+          );
+
+        if (
+          !Number.isFinite(
+            penalty
+          ) ||
+          penalty < 0
+        ) {
+          return res.status(400).json({
+            message:
+              "Negative marking penalty cannot be negative",
+          });
+        }
+
+        exam.negativePenalty =
+          penalty;
+      }
+
+      /* ---------------------------------------------------
+         ALLOWED ATTEMPTS
+      --------------------------------------------------- */
+
+      if (
+        body.allowedAttempts !==
+        undefined
+      ) {
+        const allowedAttempts =
+          Number(
+            body.allowedAttempts
+          );
+
+        if (
+          !Number.isInteger(
+            allowedAttempts
+          ) ||
+          allowedAttempts < 1 ||
+          allowedAttempts > 10
+        ) {
+          return res.status(400).json({
+            message:
+              "Allowed attempts must be between 1 and 10",
+          });
+        }
+
+        exam.allowedAttempts =
+          allowedAttempts;
+      }
+
+      /* ---------------------------------------------------
+         SHUFFLE
+      --------------------------------------------------- */
+
+      if (
+        body.shuffleQuestions !==
+        undefined
+      ) {
+        exam.shuffleQuestions =
+          parseBoolean(
+            body.shuffleQuestions,
+            false
+          );
+      }
+
+      if (
+        body.shuffleOptions !==
+        undefined
+      ) {
+        exam.shuffleOptions =
+          parseBoolean(
+            body.shuffleOptions,
+            false
+          );
+      }
+
+      /* ---------------------------------------------------
+         PUBLISHED
+      --------------------------------------------------- */
+
+      if (
+        body.published !== undefined
+      ) {
+        exam.published =
+          parseBoolean(
+            body.published,
+            false
+          );
+      }
+
+      /* ---------------------------------------------------
+         INSTRUCTIONS
+      --------------------------------------------------- */
+
+      if (
+        body.instructions !==
+        undefined
+      ) {
+        exam.instructions =
+          normalizeInstructions(
+            body.instructions
+          );
+      }
+
+      /* ---------------------------------------------------
+         DATES
+      --------------------------------------------------- */
+
+      if (
+        body.startDate !==
+        undefined
+      ) {
+        if (body.startDate) {
+          const startDate =
+            new Date(
+              body.startDate
+            );
+
+          if (
+            Number.isNaN(
+              startDate.getTime()
+            )
+          ) {
+            return res.status(400).json({
+              message:
+                "Invalid start date",
+            });
+          }
+
+          exam.startDate =
+            startDate;
+        } else {
+          exam.startDate =
+            undefined;
+        }
+      }
+
+      if (
+        body.endDate !==
+        undefined
+      ) {
+        if (body.endDate) {
+          const endDate =
+            new Date(
+              body.endDate
+            );
+
+          if (
+            Number.isNaN(
+              endDate.getTime()
+            )
+          ) {
+            return res.status(400).json({
+              message:
+                "Invalid end date",
+            });
+          }
+
+          exam.endDate =
+            endDate;
+        } else {
+          exam.endDate =
+            undefined;
+        }
+      }
 
       if (
         exam.startDate &&
-        now < exam.startDate
-      ) {
-        return res.status(403).json({
-          message:
-            "This exam has not started yet",
-        });
-      }
-
-      if (
         exam.endDate &&
-        now > exam.endDate
-      ) {
-        return res.status(403).json({
-          message:
-            "This exam is no longer available",
-        });
-      }
-
-      // --------------------------------------------------
-      // Attempt limit
-      // --------------------------------------------------
-
-      const allowedAttempts =
-        Math.max(
-          1,
-          exam.allowedAttempts ||
-            2
-        );
-
-      const attemptCount =
-        await Attempt.countDocuments({
-          studentId,
-          examId:
-            exam._id,
-        });
-
-      if (
-        attemptCount >=
-        allowedAttempts
-      ) {
-        return res.status(409).json({
-          message:
-            `You have already used all ${allowedAttempts} attempts for this exam`,
-
-          attemptsUsed:
-            attemptCount,
-
-          allowedAttempts,
-        });
-      }
-
-      // --------------------------------------------------
-      // Random question selection
-      // --------------------------------------------------
-
-      const questions =
-        await Question.aggregate([
-          {
-            $match: {
-              examId:
-                exam._id,
-            },
-          },
-
-          {
-            $sample: {
-              size:
-                exam.questionCount,
-            },
-          },
-
-          {
-            $project: {
-              _id: 1,
-            },
-          },
-        ]);
-
-      // --------------------------------------------------
-      // Check question bank
-      // --------------------------------------------------
-
-      if (
-        questions.length <
-        exam.questionCount
+        exam.endDate <=
+          exam.startDate
       ) {
         return res.status(400).json({
           message:
-            `Not enough questions available. Required: ${exam.questionCount}, Available: ${questions.length}`,
+            "End date must be after start date",
         });
       }
 
-      // --------------------------------------------------
-      // Store fixed question IDs
-      // --------------------------------------------------
-
-      const questionIds =
-        questions.map(
-          (
-            question: {
-              _id: mongoose.Types.ObjectId;
-            }
-          ) =>
-            question._id
-        );
-
-      // --------------------------------------------------
-      // Server-side timer
-      // --------------------------------------------------
-
-      const startTime =
-        new Date();
-
-      const endTime =
-        new Date(
-          startTime.getTime() +
-            exam.duration *
-              60 *
-              1000
-        );
-
-      // --------------------------------------------------
-      // Create attempt
-      // --------------------------------------------------
-
-      const attempt =
-        await Attempt.create({
-          studentId,
-
-          examId:
-            exam._id,
-
-          questionIds,
-
-          answers: {},
-
-          startTime,
-
-          endTime,
-
-          status:
-            "IN_PROGRESS",
-        });
-
-      // --------------------------------------------------
-      // Response
-      // --------------------------------------------------
-
-      return res.status(201).json({
-        message:
-          "Exam started successfully",
-
-        attempt,
-
-        attemptsUsed:
-          attemptCount + 1,
-
-        allowedAttempts,
-
-        attemptsRemaining:
-          Math.max(
-            0,
-            allowedAttempts -
-              (attemptCount + 1)
-          ),
-      });
-    } catch (error: any) {
-      console.error(
-        "Error starting exam:",
-        error
-      );
-
       if (
-        error?.name ===
-        "ValidationError"
+        exam.passingMarks >
+        exam.totalMarks
       ) {
         return res.status(400).json({
           message:
-            "Invalid exam or student information",
+            "Passing marks cannot exceed total marks",
         });
       }
 
-      return res.status(500).json({
-        message:
-          "Failed to start exam",
-      });
-    }
-  }
-);
-
-// ======================================================
-// GET EXAM RESULTS
-// ======================================================
-//
-// GET /api/exams/:examId/results
-//
-// ======================================================
-
-router.get(
-  "/:examId/results",
-  async (
-    req: Request<{
-      examId: string;
-    }>,
-    res: Response
-  ) => {
-    try {
-      const {
-        examId,
-      } = req.params;
-
-      if (
-        !isValidObjectId(
-          examId
-        )
-      ) {
-        return res.status(400).json({
-          message:
-            "Invalid exam ID",
-        });
-      }
-
-      const exam =
-        await Exam.findById(
-          examId
-        ).lean();
-
-      if (!exam) {
-        return res.status(404).json({
-          message:
-            "Exam not found",
-        });
-      }
-
-      const attempts =
-        await Attempt.find({
-          examId:
-            exam._id,
-        })
-          .populate(
-            "studentId",
-            "name email degree yearOfStudy semester studentId"
-          )
-          .sort({
-            submittedAt: -1,
-            createdAt: -1,
-          })
-          .lean();
+      await exam.save();
 
       return res.status(200).json({
-        exam: {
-          _id:
-            exam._id,
-
-          title:
-            exam.title,
-
-          subject:
-            exam.subject,
-
-          degree:
-            exam.degree,
-
-          yearOfStudy:
-            exam.yearOfStudy,
-
-          semester:
-            exam.semester,
-
-          totalMarks:
-            exam.totalMarks,
-
-          passingMarks:
-            exam.passingMarks,
-        },
-
-        attempts,
+        message:
+          "Exam updated successfully",
+        exam,
       });
     } catch (error) {
       console.error(
-        "Error fetching exam results:",
+        "Update exam error:",
         error
       );
 
       return res.status(500).json({
         message:
-          "Failed to fetch exam results",
+          "Failed to update exam",
       });
     }
   }
 );
 
-// ======================================================
-// GET EXAM ATTEMPTS
-// ======================================================
-//
-// GET /api/exams/:examId/attempts
-//
-// ======================================================
-
-router.get(
-  "/:examId/attempts",
-  async (
-    req: Request<{
-      examId: string;
-    }>,
-    res: Response
-  ) => {
-    try {
-      const {
-        examId,
-      } = req.params;
-
-      if (
-        !isValidObjectId(
-          examId
-        )
-      ) {
-        return res.status(400).json({
-          message:
-            "Invalid exam ID",
-        });
-      }
-
-      const attempts =
-        await Attempt.find({
-          examId:
-            new mongoose.Types.ObjectId(
-              examId
-            ),
-        })
-          .populate(
-            "studentId",
-            [
-              "name",
-              "email",
-              "degree",
-              "yearOfStudy",
-              "semester",
-              "studentId",
-            ].join(" ")
-          )
-          .sort({
-            createdAt: -1,
-          })
-          .lean();
-
-      return res.status(200).json(
-        attempts
-      );
-    } catch (error) {
-      console.error(
-        "Error fetching attempts:",
-        error
-      );
-
-      return res.status(500).json({
-        message:
-          "Failed to fetch attempts",
-      });
-    }
-  }
-);
-
-// ======================================================
-// DELETE DRAFT EXAM
-// ======================================================
-//
-// DELETE /api/exams/:examId
-//
-// Published exams cannot be deleted.
-//
-// ======================================================
+/* =========================================================
+   DELETE EXAM
+   DELETE /api/exams/:examId
+========================================================= */
 
 router.delete(
   "/:examId",
+  requireAuth,
   async (
-    req: Request<{
-      examId: string;
-    }>,
+    req: AuthenticatedRequest,
     res: Response
   ) => {
     try {
-      const {
-        examId,
-      } = req.params;
+      if (!requireInstructorAccess(req)) {
+        return res.status(403).json({
+          message:
+            "Instructor access required",
+        });
+      }
 
-      if (
-        !isValidObjectId(
-          examId
-        )
-      ) {
+      const examId = getExamId(
+        req.params.examId
+      );
+
+      if (!isValidObjectId(examId)) {
         return res.status(400).json({
           message:
             "Invalid exam ID",
@@ -1389,9 +1312,7 @@ router.delete(
       }
 
       const exam =
-        await Exam.findById(
-          examId
-        );
+        await Exam.findById(examId);
 
       if (!exam) {
         return res.status(404).json({
@@ -1401,23 +1322,38 @@ router.delete(
       }
 
       if (
-        exam.published
+        exam.createdBy?.toString() !==
+        req.user?.userId
       ) {
-        return res.status(400).json({
+        return res.status(403).json({
           message:
-            "Published exams cannot be deleted",
+            "You are not allowed to delete this exam",
         });
       }
 
+      /*
+       * Delete associated questions.
+       */
       await Question.deleteMany({
         examId:
-          exam._id,
+          new mongoose.Types.ObjectId(
+            examId
+          ),
       });
 
-      await Exam.deleteOne({
-        _id:
-          exam._id,
+      /*
+       * Delete associated attempts.
+       */
+      await Attempt.deleteMany({
+        examId:
+          new mongoose.Types.ObjectId(
+            examId
+          ),
       });
+
+      await Exam.findByIdAndDelete(
+        examId
+      );
 
       return res.status(200).json({
         message:
@@ -1425,7 +1361,7 @@ router.delete(
       });
     } catch (error) {
       console.error(
-        "Error deleting exam:",
+        "Delete exam error:",
         error
       );
 
@@ -1437,8 +1373,526 @@ router.delete(
   }
 );
 
-// ======================================================
-// EXPORT
-// ======================================================
+/* =========================================================
+   START EXAM
+   POST /api/exams/:examId/start
+========================================================= */
+
+router.post(
+  "/:examId/start",
+  requireAuth,
+  async (
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    try {
+      if (!requireStudentAccess(req)) {
+        return res.status(403).json({
+          message:
+            "Only students can start an exam",
+        });
+      }
+
+      const examId = getExamId(
+        req.params.examId
+      );
+
+      if (!isValidObjectId(examId)) {
+        return res.status(400).json({
+          message:
+            "Invalid exam ID",
+        });
+      }
+
+      /*
+       * IMPORTANT:
+       * Never trust studentId from req.body.
+       * The authenticated user ID is the student.
+       */
+      const studentId =
+        req.user?.userId;
+
+      if (
+        !studentId ||
+        !isValidObjectId(studentId)
+      ) {
+        return res.status(401).json({
+          message:
+            "Invalid student authentication",
+        });
+      }
+
+      /* ---------------------------------------------------
+         FIND PUBLISHED EXAM
+      --------------------------------------------------- */
+
+      const exam =
+        await Exam.findOne({
+          _id:
+            new mongoose.Types.ObjectId(
+              examId
+            ),
+          published: true,
+        });
+
+      if (!exam) {
+        return res.status(404).json({
+          message:
+            "Published exam not found",
+        });
+      }
+
+      /* ---------------------------------------------------
+         FIND STUDENT
+      --------------------------------------------------- */
+
+      const student =
+        await User.findById(
+          studentId
+        ).select(
+          "_id role degree yearOfStudy semester isActive"
+        );
+
+      if (!student) {
+        return res.status(401).json({
+          message:
+            "Student account not found",
+        });
+      }
+
+      if (
+        student.role !== "student"
+      ) {
+        return res.status(403).json({
+          message:
+            "Only student accounts can start exams",
+        });
+      }
+
+      if (!student.isActive) {
+        return res.status(403).json({
+          message:
+            "Your account has been disabled",
+        });
+      }
+
+      /* ---------------------------------------------------
+         DEGREE ELIGIBILITY
+      --------------------------------------------------- */
+
+      if (exam.degree) {
+        if (!student.degree) {
+          return res.status(403).json({
+            message:
+              "Your academic profile is incomplete. Please contact your instructor.",
+          });
+        }
+
+        if (
+          exam.degree !==
+          student.degree
+        ) {
+          return res.status(403).json({
+            message:
+              "You are not eligible for this exam",
+          });
+        }
+      }
+
+      /* ---------------------------------------------------
+         YEAR ELIGIBILITY
+      --------------------------------------------------- */
+
+      if (
+        exam.yearOfStudy !==
+        undefined &&
+        exam.yearOfStudy !==
+        null
+      ) {
+        if (!student.yearOfStudy) {
+          return res.status(403).json({
+            message:
+              "Your year of study is not configured. Please contact your instructor.",
+          });
+        }
+
+        if (
+          exam.yearOfStudy !==
+          student.yearOfStudy
+        ) {
+          return res.status(403).json({
+            message:
+              "This exam is not assigned to your year",
+          });
+        }
+      }
+
+      /* ---------------------------------------------------
+         SEMESTER ELIGIBILITY
+      --------------------------------------------------- */
+
+      if (
+        exam.semester !==
+        undefined &&
+        exam.semester !==
+        null
+      ) {
+        if (!student.semester) {
+          return res.status(403).json({
+            message:
+              "Your semester is not configured. Please contact your instructor.",
+          });
+        }
+
+        if (
+          exam.semester !==
+          student.semester
+        ) {
+          return res.status(403).json({
+            message:
+              "This exam is not assigned to your semester",
+          });
+        }
+      }
+
+      /* ---------------------------------------------------
+         DATE VALIDATION
+      --------------------------------------------------- */
+
+      const now = new Date();
+
+      if (
+        exam.startDate &&
+        now < new Date(exam.startDate)
+      ) {
+        return res.status(403).json({
+          message:
+            "This exam has not started yet",
+        });
+      }
+
+      if (
+        exam.endDate &&
+        now > new Date(exam.endDate)
+      ) {
+        return res.status(403).json({
+          message:
+            "This exam has ended",
+        });
+      }
+
+      /* ---------------------------------------------------
+         ATTEMPT LIMIT
+      --------------------------------------------------- */
+
+      const allowedAttempts =
+        Math.max(
+          1,
+          Number(
+            exam.allowedAttempts ?? 1
+          )
+        );
+
+      const studentObjectId =
+        new mongoose.Types.ObjectId(
+          studentId
+        );
+
+      const examObjectId =
+        new mongoose.Types.ObjectId(
+          examId
+        );
+
+      /*
+       * Existing attempts belong only to the
+       * authenticated student.
+       */
+      const existingAttempts =
+        await Attempt.find({
+          studentId:
+            studentObjectId,
+          examId:
+            examObjectId,
+        })
+          .sort({
+            createdAt: 1,
+          })
+          .lean();
+
+      /*
+       * If an unfinished attempt already exists,
+       * resume it instead of creating another one.
+       *
+       * This is especially useful if the student
+       * refreshes or closes the browser.
+       */
+      const activeAttempt =
+        existingAttempts.find(
+          (attempt) =>
+            attempt.status ===
+            "IN_PROGRESS"
+        );
+
+      if (activeAttempt) {
+        const activeEndTime =
+          activeAttempt.endTime
+            ? new Date(
+                activeAttempt.endTime
+              )
+            : null;
+
+        /*
+         * If the active attempt has already expired,
+         * close it here.
+         */
+        if (
+          activeEndTime &&
+          activeEndTime <= now
+        ) {
+          activeAttempt.status =
+            "TIMED_OUT";
+
+          await Attempt.updateOne(
+            {
+              _id: activeAttempt._id,
+              status: "IN_PROGRESS",
+            },
+            {
+              $set: {
+                status: "TIMED_OUT",
+                submittedAt: now,
+              },
+            }
+          );
+        } else {
+          return res.status(200).json({
+            message:
+              "Existing exam attempt resumed",
+            attemptId:
+              activeAttempt._id.toString(),
+            startTime:
+              activeAttempt.startTime,
+            endTime:
+              activeAttempt.endTime,
+            duration:
+              exam.duration,
+            questionCount:
+              activeAttempt.questionIds
+                .length,
+            resumed: true,
+          });
+        }
+      }
+
+      /*
+       * Recalculate attempts after possible timeout.
+       */
+      const currentAttempts =
+        await Attempt.countDocuments({
+          studentId:
+            studentObjectId,
+          examId:
+            examObjectId,
+          status: {
+            $in: [
+              "IN_PROGRESS",
+              "SUBMITTED",
+              "EVALUATED",
+              "TIMED_OUT",
+            ],
+          },
+        });
+
+      if (
+        currentAttempts >=
+        allowedAttempts
+      ) {
+        return res.status(409).json({
+          message:
+            `You have already used all ${allowedAttempts} attempt${
+              allowedAttempts === 1
+                ? ""
+                : "s"
+            } for this exam`,
+          attemptsUsed:
+            currentAttempts,
+          allowedAttempts,
+        });
+      }
+
+      /* ---------------------------------------------------
+         QUESTION COUNT
+      --------------------------------------------------- */
+
+      const questionCount =
+        Math.max(
+          1,
+          Number(exam.questionCount)
+        );
+
+      /* ---------------------------------------------------
+         FIND AVAILABLE QUESTIONS
+      --------------------------------------------------- */
+
+      const availableQuestionCount =
+        await Question.countDocuments({
+          examId: examObjectId,
+        });
+
+      if (
+        availableQuestionCount <
+        questionCount
+      ) {
+        return res.status(400).json({
+          message:
+            `This exam requires ${questionCount} questions, but only ${availableQuestionCount} are available in the question bank.`,
+        });
+      }
+
+      /* ---------------------------------------------------
+         SELECT FIXED QUESTION SET
+      --------------------------------------------------- */
+
+      let questions:
+        QuestionIdDocument[];
+
+      if (exam.shuffleQuestions) {
+        const randomQuestions =
+          await Question.aggregate([
+            {
+              $match: {
+                examId:
+                  examObjectId,
+              },
+            },
+            {
+              $sample: {
+                size: questionCount,
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+              },
+            },
+          ]);
+
+        questions =
+          randomQuestions as QuestionIdDocument[];
+      } else {
+        const orderedQuestions =
+          await Question.find({
+            examId:
+              examObjectId,
+          })
+            .select("_id")
+            .sort({
+              order: 1,
+              createdAt: 1,
+            })
+            .limit(questionCount)
+            .lean();
+
+        questions =
+          orderedQuestions as QuestionIdDocument[];
+      }
+
+      if (
+        questions.length <
+        questionCount
+      ) {
+        return res.status(400).json({
+          message:
+            `This exam requires ${questionCount} questions, but only ${questions.length} are available in the question bank.`,
+        });
+      }
+
+      /* ---------------------------------------------------
+         SERVER-SIDE TIMER
+      --------------------------------------------------- */
+
+      const startTime = new Date();
+
+      const endTime = new Date(
+        startTime.getTime() +
+          Number(exam.duration) *
+            60 *
+            1000
+      );
+
+      /* ---------------------------------------------------
+         FIXED QUESTION SET
+      --------------------------------------------------- */
+
+      const questionIds =
+        questions.map(
+          (question) => question._id
+        );
+
+      /* ---------------------------------------------------
+         CREATE ATTEMPT
+      --------------------------------------------------- */
+
+      const attempt =
+        await Attempt.create({
+          studentId:
+            studentObjectId,
+
+          examId:
+            examObjectId,
+
+          questionIds,
+
+          answers: {},
+
+          startTime,
+
+          endTime,
+
+          status: "IN_PROGRESS",
+
+          tabSwitchCount: 0,
+        });
+
+      /* ---------------------------------------------------
+         RESPONSE
+      --------------------------------------------------- */
+
+      return res.status(201).json({
+        message:
+          "Exam started successfully",
+
+        attemptId:
+          attempt._id.toString(),
+
+        startTime,
+
+        endTime,
+
+        duration:
+          exam.duration,
+
+        questionCount:
+          questionIds.length,
+
+        resumed: false,
+      });
+    } catch (error) {
+      console.error(
+        "Start exam error:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Failed to start exam",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   EXPORT
+========================================================= */
 
 export default router;

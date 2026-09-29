@@ -1,22 +1,20 @@
-import { useEffect, useState } from "react";
 import {
-  useDispatch,
-  useSelector,
-} from "react-redux";
-import { useNavigate } from "react-router-dom";
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
-  Activity,
+  AlertCircle,
   ArrowRight,
-  BarChart3,
-  Bell,
   BookOpen,
   CheckCircle2,
-  ChevronDown,
   Clock3,
   FileQuestion,
   GraduationCap,
   LayoutDashboard,
+  Loader2,
   LogOut,
   Menu,
   Plus,
@@ -24,16 +22,20 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
-  Target,
   Users,
   X,
 } from "lucide-react";
+
+import {
+  useNavigate,
+} from "react-router-dom";
 
 // ======================================================
 // CONFIG
 // ======================================================
 
-const API_URL = "http://localhost:5000/api";
+const API_URL =
+  "http://localhost:5000/api";
 
 // ======================================================
 // TYPES
@@ -41,9 +43,14 @@ const API_URL = "http://localhost:5000/api";
 
 interface InstructorUser {
   id: string;
+  _id?: string;
+
   name: string;
   email: string;
-  role: "student" | "instructor";
+
+  role:
+    | "student"
+    | "instructor";
 
   degree?: string;
   yearOfStudy?: number;
@@ -54,39 +61,47 @@ interface InstructorUser {
   city?: string;
   bio?: string;
 
-  profilePicture?: string;
+  profilePicture?: string | null;
 }
 
-interface RootState {
-  auth: {
-    user: InstructorUser | null;
-    isAuthenticated: boolean;
-  };
-}
-
-interface DashboardExam {
+interface Exam {
   _id: string;
+
   title: string;
+
+  subject?: string;
+
+  degree?: string;
+
+  yearOfStudy?: number;
+
+  semester?: number;
+
   duration: number;
+
   questionCount: number;
 
   totalMarks?: number;
+
   passingMarks?: number;
 
   negativeMarking: boolean;
+
   negativePenalty: number;
 
   allowedAttempts?: number;
-  published?: boolean;
 
-  degree?: string;
-  yearOfStudy?: number;
-  semester?: number;
-  subject?: string;
+  published: boolean;
+
+  startDate?: string;
+
+  endDate?: string;
+
+  createdAt?: string;
 }
 
 // ======================================================
-// HELPER - YEAR
+// HELPERS
 // ======================================================
 
 const getYearLabel = (
@@ -107,10 +122,6 @@ const getYearLabel = (
   return "All Years";
 };
 
-// ======================================================
-// HELPER - SEMESTER
-// ======================================================
-
 const getSemesterLabel = (
   semester?: number
 ): string => {
@@ -122,176 +133,76 @@ const getSemesterLabel = (
 };
 
 // ======================================================
-// HELPER - INITIALS
-// ======================================================
-
-const getInitials = (
-  name?: string
-): string => {
-  if (!name?.trim()) {
-    return "IN";
-  }
-
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map(
-      (part) =>
-        part.charAt(0)
-    )
-    .join("")
-    .toUpperCase();
-};
-
-// ======================================================
-// FALLBACK EXAMS
-// ======================================================
-//
-// These are only used if the backend API does not
-// return an exam list yet.
-//
-// No temporary file is created.
-//
-
-const demoExams: DashboardExam[] = [
-  {
-    _id: "demo-js",
-    title: "JavaScript Fundamentals",
-    duration: 40,
-    questionCount: 25,
-    totalMarks: 25,
-    passingMarks: 13,
-    negativeMarking: true,
-    negativePenalty: 0.25,
-    allowedAttempts: 2,
-    published: true,
-    degree: "BCA",
-    yearOfStudy: 2,
-    semester: 3,
-    subject: "Web Development",
-  },
-
-  {
-    _id: "demo-python",
-    title: "Python Fundamentals",
-    duration: 30,
-    questionCount: 25,
-    totalMarks: 25,
-    passingMarks: 13,
-    negativeMarking: false,
-    negativePenalty: 0,
-    allowedAttempts: 2,
-    published: true,
-    degree: "BCA",
-    yearOfStudy: 1,
-    semester: 2,
-    subject: "Programming",
-  },
-
-  {
-    _id: "demo-java",
-    title: "Java Programming",
-    duration: 30,
-    questionCount: 25,
-    totalMarks: 25,
-    passingMarks: 13,
-    negativeMarking: false,
-    negativePenalty: 0,
-    allowedAttempts: 2,
-    published: true,
-    degree: "BCA",
-    yearOfStudy: 2,
-    semester: 4,
-    subject: "Object Oriented Programming",
-  },
-
-  {
-    _id: "demo-sql",
-    title: "SQL & Database Fundamentals",
-    duration: 30,
-    questionCount: 25,
-    totalMarks: 25,
-    passingMarks: 13,
-    negativeMarking: false,
-    negativePenalty: 0,
-    allowedAttempts: 2,
-    published: true,
-    degree: "BCA",
-    yearOfStudy: 3,
-    semester: 5,
-    subject: "Database Management",
-  },
-];
-
-// ======================================================
 // COMPONENT
 // ======================================================
 
 function InstructorDashboard() {
-  const navigate = useNavigate();
-
-  // ====================================================
-  // REDUX
-  // ====================================================
-  //
-  // We intentionally do NOT import:
-  //
-  // ../hooks
-  // ../slices/authSlice
-  //
-  // This removes the two module errors shown in VS Code.
-  //
-
-  const dispatch = useDispatch();
-
-  const user = useSelector(
-    (state: RootState) =>
-      state.auth.user
-  );
+  const navigate =
+    useNavigate();
 
   // ====================================================
   // STATE
   // ====================================================
 
+  const [user, setUser] =
+    useState<InstructorUser | null>(
+      null
+    );
+
   const [exams, setExams] =
-    useState<DashboardExam[]>([]);
+    useState<Exam[]>([]);
 
   const [loading, setLoading] =
     useState(true);
 
+  const [error, setError] =
+    useState("");
+
   const [search, setSearch] =
     useState("");
 
-  const [sidebarOpen, setSidebarOpen] =
-    useState(false);
-
-  const [profileOpen, setProfileOpen] =
-    useState(false);
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] = useState<
+    "all" | "published" | "draft"
+  >("all");
 
   const [
-    notificationsOpen,
-    setNotificationsOpen,
+    mobileMenuOpen,
+    setMobileMenuOpen,
+  ] = useState(false);
+
+  const [
+    loggingOut,
+    setLoggingOut,
   ] = useState(false);
 
   // ====================================================
-  // LOAD PUBLISHED EXAMS
+  // LOAD DASHBOARD
   // ====================================================
 
   useEffect(() => {
-    let cancelled = false;
-
-    const loadExams =
-      async (): Promise<void> => {
+    const loadDashboard =
+      async () => {
         try {
           setLoading(true);
 
-          const response =
+          setError("");
+
+          // ------------------------------------------------
+          // Load instructor profile
+          // ------------------------------------------------
+
+          const profileResponse =
             await fetch(
-              `${API_URL}/exams/published`,
+              `${API_URL}/profile/me`,
               {
                 method: "GET",
-                credentials: "include",
+
+                credentials:
+                  "include",
+
                 headers: {
                   Accept:
                     "application/json",
@@ -299,1692 +210,1081 @@ function InstructorDashboard() {
               }
             );
 
-          if (!response.ok) {
-            throw new Error(
-              "Unable to load exams"
-            );
-          }
+          if (
+            profileResponse.status ===
+            401
+          ) {
+            navigate("/");
 
-          const data =
-            await response.json();
-
-          if (cancelled) {
             return;
           }
 
-          if (Array.isArray(data)) {
-            setExams(data);
-          } else {
-            setExams([]);
+          const profileData =
+            await profileResponse.json();
+
+          if (
+            !profileResponse.ok
+          ) {
+            throw new Error(
+              profileData?.message ||
+                "Unable to load instructor profile"
+            );
           }
-        } catch (error) {
-          console.warn(
-            "Instructor exam API unavailable:",
-            error
+
+          const profileUser =
+            profileData?.user ||
+            profileData;
+
+          if (
+            profileUser?.role &&
+            profileUser.role !==
+              "instructor"
+          ) {
+            navigate("/student");
+
+            return;
+          }
+
+          setUser(
+            profileUser as InstructorUser
           );
 
-          if (!cancelled) {
-            setExams(demoExams);
+          // ------------------------------------------------
+          // Load instructor exams
+          // ------------------------------------------------
+
+          const examResponse =
+            await fetch(
+              `${API_URL}/exams/instructor`,
+              {
+                method: "GET",
+
+                credentials:
+                  "include",
+
+                headers: {
+                  Accept:
+                    "application/json",
+                },
+              }
+            );
+
+          if (
+            examResponse.status ===
+            401
+          ) {
+            navigate("/");
+
+            return;
           }
+
+          const examData =
+            await examResponse.json();
+
+          if (
+            !examResponse.ok
+          ) {
+            throw new Error(
+              examData?.message ||
+                "Unable to load exams"
+            );
+          }
+
+          const examList =
+            Array.isArray(
+              examData
+            )
+              ? examData
+              : Array.isArray(
+                    examData?.exams
+                  )
+                ? examData.exams
+                : [];
+
+          setExams(
+            examList as Exam[]
+          );
+        } catch (err) {
+          console.error(
+            "Instructor dashboard error:",
+            err
+          );
+
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load instructor dashboard."
+          );
         } finally {
-          if (!cancelled) {
-            setLoading(false);
-          }
+          setLoading(false);
         }
       };
 
-    void loadExams();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void loadDashboard();
+  }, [navigate]);
 
   // ====================================================
-  // DISPLAY EXAMS
-  // ====================================================
-
-  const displayExams =
-    exams.length > 0
-      ? exams
-      : demoExams;
-
-  // ====================================================
-  // SEARCH FILTER
+  // FILTER EXAMS
   // ====================================================
 
   const filteredExams =
-    displayExams.filter(
-      (exam) => {
-        const searchText =
-          search
-            .trim()
-            .toLowerCase();
+    useMemo(() => {
+      const query =
+        search
+          .trim()
+          .toLowerCase();
 
-        if (!searchText) {
-          return true;
+      return exams.filter(
+        (exam) => {
+          const matchesSearch =
+            !query ||
+            exam.title
+              .toLowerCase()
+              .includes(query) ||
+            Boolean(
+              exam.subject
+                ?.toLowerCase()
+                .includes(query)
+            );
+
+          const matchesStatus =
+            statusFilter ===
+              "all" ||
+            (statusFilter ===
+              "published" &&
+              exam.published) ||
+            (statusFilter ===
+              "draft" &&
+              !exam.published);
+
+          return (
+            matchesSearch &&
+            matchesStatus
+          );
         }
-
-        return (
-          exam.title
-            .toLowerCase()
-            .includes(searchText) ||
-          exam.subject
-            ?.toLowerCase()
-            .includes(searchText) ||
-          getYearLabel(
-            exam.yearOfStudy
-          )
-            .toLowerCase()
-            .includes(searchText)
-        );
-      }
-    );
+      );
+    }, [
+      exams,
+      search,
+      statusFilter,
+    ]);
 
   // ====================================================
-  // STATISTICS
+  // STATS
   // ====================================================
 
   const publishedCount =
-    displayExams.filter(
+    exams.filter(
       (exam) =>
-        exam.published !== false
+        exam.published
     ).length;
 
   const draftCount =
-    displayExams.filter(
+    exams.filter(
       (exam) =>
-        exam.published === false
+        !exam.published
     ).length;
 
   const totalQuestions =
-    displayExams.reduce(
-      (total, exam) =>
+    exams.reduce(
+      (
+        total,
+        exam
+      ) =>
         total +
-        exam.questionCount,
+        Number(
+          exam.questionCount ||
+            0
+        ),
       0
     );
-
-  const totalDuration =
-    displayExams.reduce(
-      (total, exam) =>
-        total + exam.duration,
-      0
-    );
-
-  // ====================================================
-  // LOGOUT
-  // ====================================================
-
-  const handleLogout =
-    async (): Promise<void> => {
-      try {
-        await fetch(
-          `${API_URL}/auth/logout`,
-          {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              Accept:
-                "application/json",
-            },
-          }
-        );
-      } catch {
-        // Clear frontend state even if
-        // backend logout request fails.
-      }
-
-      // We intentionally dispatch the action
-      // directly instead of importing authSlice.
-      dispatch({
-        type: "auth/logout",
-      });
-
-      navigate("/");
-    };
 
   // ====================================================
   // CREATE EXAM
   // ====================================================
 
   const handleCreateExam =
-    (): void => {
+    () => {
       navigate(
-        "/instructor/exams/new"
+        "/instructor/exams/create"
       );
     };
 
   // ====================================================
-  // SIDEBAR
+  // OPEN QUESTION BANK
   // ====================================================
 
-  const Sidebar = () => {
+  const handleQuestionBank =
+    (
+      examId: string
+    ) => {
+      navigate(
+        `/instructor/exams/${examId}/questions`
+      );
+    };
+
+  // ====================================================
+  // MANAGE EXAM
+  // ====================================================
+
+  const handleManageExam =
+    (
+      examId: string
+    ) => {
+      navigate(
+        `/instructor/exams/${examId}/edit`
+      );
+    };
+
+  // ====================================================
+  // LOGOUT
+  // ====================================================
+
+  const handleLogout =
+    async () => {
+      try {
+        setLoggingOut(true);
+
+        await fetch(
+          `${API_URL}/auth/logout`,
+          {
+            method: "POST",
+
+            credentials:
+              "include",
+
+            headers: {
+              Accept:
+                "application/json",
+            },
+          }
+        );
+      } catch (err) {
+        console.error(
+          "Logout error:",
+          err
+        );
+      } finally {
+        navigate("/");
+
+        setLoggingOut(false);
+      }
+    };
+
+  // ====================================================
+  // LOADING SCREEN
+  // ====================================================
+
+  if (loading) {
     return (
-      <>
-        {sidebarOpen && (
-          <button
-            type="button"
-            aria-label="Close navigation"
-            onClick={() =>
-              setSidebarOpen(false)
-            }
-            className="
-              fixed
-              inset-0
-              z-40
-              bg-slate-950/60
-              backdrop-blur-sm
-              lg:hidden
-            "
-          />
-        )}
-
-        <aside
-          className={`
-            fixed
-            left-0
-            top-0
-            z-50
-            flex
-            h-screen
-            w-[270px]
-            flex-col
-            border-r
-            border-white/10
-            bg-[#090d24]
-            text-white
-            shadow-2xl
-            transition-transform
-            duration-300
-            lg:translate-x-0
-            ${
-              sidebarOpen
-                ? "translate-x-0"
-                : "-translate-x-full"
-            }
-          `}
-        >
-          {/* BRAND */}
-
-          <div className="flex h-[84px] items-center border-b border-white/10 px-6">
-            <div className="flex items-center gap-3">
-              <div
-                className="
-                  flex
-                  h-11
-                  w-11
-                  items-center
-                  justify-center
-                  rounded-2xl
-                  bg-gradient-to-br
-                  from-indigo-500
-                  via-violet-600
-                  to-fuchsia-600
-                  shadow-lg
-                  shadow-indigo-500/30
-                "
-              >
-                <Sparkles
-                  size={21}
-                  strokeWidth={2.2}
-                />
-              </div>
-
-              <div>
-                <h1 className="text-[18px] font-extrabold tracking-tight">
-                  ExamForge
-                </h1>
-
-                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-indigo-200/70">
-                  Instructor Portal
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                setSidebarOpen(false)
-              }
-              className="ml-auto rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
-            >
-              <X size={19} />
-            </button>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 shadow-lg shadow-indigo-200">
+            <Loader2 className="h-7 w-7 animate-spin text-white" />
           </div>
 
-          {/* NAVIGATION */}
+          <p className="mt-4 text-sm font-bold text-slate-600">
+            Loading instructor
+            workspace...
+          </p>
 
-          <div className="flex-1 overflow-y-auto px-4 py-6">
-            <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-              Workspace
-            </p>
-
-            <nav className="space-y-1.5">
-              {/* Dashboard */}
-
-              <button
-                type="button"
-                className="
-                  flex
-                  w-full
-                  items-center
-                  gap-3
-                  rounded-xl
-                  bg-gradient-to-r
-                  from-indigo-600
-                  to-violet-600
-                  px-3
-                  py-3
-                  text-left
-                  text-sm
-                  font-semibold
-                  text-white
-                  shadow-lg
-                  shadow-indigo-600/20
-                "
-              >
-                <LayoutDashboard
-                  size={18}
-                />
-
-                <span>
-                  Dashboard
-                </span>
-              </button>
-
-              {/* Exams */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    "/instructor/exams"
-                  )
-                }
-                className="
-                  flex
-                  w-full
-                  items-center
-                  gap-3
-                  rounded-xl
-                  px-3
-                  py-3
-                  text-left
-                  text-sm
-                  font-medium
-                  text-slate-300
-                  transition
-                  hover:bg-white/8
-                  hover:text-white
-                "
-              >
-                <BookOpen size={18} />
-
-                <span>Exams</span>
-              </button>
-
-              {/* Question Bank */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    "/instructor/questions"
-                  )
-                }
-                className="
-                  flex
-                  w-full
-                  items-center
-                  gap-3
-                  rounded-xl
-                  px-3
-                  py-3
-                  text-left
-                  text-sm
-                  font-medium
-                  text-slate-300
-                  transition
-                  hover:bg-white/8
-                  hover:text-white
-                "
-              >
-                <FileQuestion
-                  size={18}
-                />
-
-                <span>
-                  Question Bank
-                </span>
-              </button>
-
-              {/* Students */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    "/instructor/students"
-                  )
-                }
-                className="
-                  flex
-                  w-full
-                  items-center
-                  gap-3
-                  rounded-xl
-                  px-3
-                  py-3
-                  text-left
-                  text-sm
-                  font-medium
-                  text-slate-300
-                  transition
-                  hover:bg-white/8
-                  hover:text-white
-                "
-              >
-                <Users size={18} />
-
-                <span>
-                  Students
-                </span>
-              </button>
-
-              {/* Assignments */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    "/instructor/assignments"
-                  )
-                }
-                className="
-                  flex
-                  w-full
-                  items-center
-                  gap-3
-                  rounded-xl
-                  px-3
-                  py-3
-                  text-left
-                  text-sm
-                  font-medium
-                  text-slate-300
-                  transition
-                  hover:bg-white/8
-                  hover:text-white
-                "
-              >
-                <Target size={18} />
-
-                <span>
-                  Assignments
-                </span>
-              </button>
-
-              {/* Results */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    "/instructor/results"
-                  )
-                }
-                className="
-                  flex
-                  w-full
-                  items-center
-                  gap-3
-                  rounded-xl
-                  px-3
-                  py-3
-                  text-left
-                  text-sm
-                  font-medium
-                  text-slate-300
-                  transition
-                  hover:bg-white/8
-                  hover:text-white
-                "
-              >
-                <BarChart3 size={18} />
-
-                <span>
-                  Results & Analytics
-                </span>
-              </button>
-            </nav>
-
-            <p className="mb-3 mt-8 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-              Account
-            </p>
-
-            <nav className="space-y-1.5">
-              {/* Profile */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    "/instructor/profile"
-                  )
-                }
-                className="
-                  flex
-                  w-full
-                  items-center
-                  gap-3
-                  rounded-xl
-                  px-3
-                  py-3
-                  text-left
-                  text-sm
-                  font-medium
-                  text-slate-300
-                  transition
-                  hover:bg-white/8
-                  hover:text-white
-                "
-              >
-                <GraduationCap
-                  size={18}
-                />
-
-                <span>
-                  Instructor Profile
-                </span>
-              </button>
-
-              {/* Settings */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    "/instructor/settings"
-                  )
-                }
-                className="
-                  flex
-                  w-full
-                  items-center
-                  gap-3
-                  rounded-xl
-                  px-3
-                  py-3
-                  text-left
-                  text-sm
-                  font-medium
-                  text-slate-300
-                  transition
-                  hover:bg-white/8
-                  hover:text-white
-                "
-              >
-                <Settings size={18} />
-
-                <span>
-                  Settings
-                </span>
-              </button>
-            </nav>
-          </div>
-
-          {/* SECURITY */}
-
-          <div className="border-t border-white/10 p-4">
-            <div className="rounded-2xl border border-emerald-400/10 bg-emerald-400/5 p-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400/10 text-emerald-400">
-                  <ShieldCheck
-                    size={17}
-                  />
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold text-white">
-                    Secure workspace
-                  </p>
-
-                  <p className="mt-1 text-[10px] leading-4 text-slate-400">
-                    Instructor access is protected
-                    by your authenticated session.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="
-                mt-3
-                flex
-                w-full
-                items-center
-                gap-3
-                rounded-xl
-                px-3
-                py-3
-                text-left
-                text-sm
-                font-medium
-                text-slate-400
-                transition
-                hover:bg-red-500/10
-                hover:text-red-300
-              "
-            >
-              <LogOut size={18} />
-
-              <span>
-                Sign out
-              </span>
-            </button>
-          </div>
-        </aside>
-      </>
+          <p className="mt-1 text-xs text-slate-400">
+            Please wait a moment
+          </p>
+        </div>
+      </div>
     );
-  };
+  }
 
   // ====================================================
   // MAIN UI
   // ====================================================
 
   return (
-    <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
-      <Sidebar />
+    <div className="min-h-screen bg-slate-50">
 
-      <div className="min-h-screen lg:pl-[270px]">
-        {/* =================================================
-            HEADER
-        ================================================= */}
+      {/* ==================================================
+          HEADER
+      ================================================== */}
 
-        <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
-          <div className="flex h-[76px] items-center justify-between px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-3">
-              {/* MOBILE MENU */}
+      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-xl">
+        <div className="mx-auto flex h-[74px] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+
+          {/* BRAND */}
+
+          <button
+            type="button"
+            onClick={() =>
+              navigate(
+                "/instructor"
+              )
+            }
+            className="flex items-center gap-3"
+          >
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 shadow-lg shadow-indigo-200">
+              <BookOpen className="h-5 w-5 text-white" />
+            </div>
+
+            <div className="hidden text-left sm:block">
+              <h1 className="text-xl font-black tracking-tight text-slate-900">
+                Exam
+                <span className="text-indigo-600">
+                  Forge
+                </span>
+              </h1>
+
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                Instructor Portal
+              </p>
+            </div>
+          </button>
+
+          {/* DESKTOP NAV */}
+
+          <nav className="hidden items-center gap-1 md:flex">
+
+            <button
+              type="button"
+              className="flex items-center gap-2 rounded-xl bg-indigo-50 px-4 py-2.5 text-sm font-bold text-indigo-600"
+            >
+              <LayoutDashboard className="h-4 w-4" />
+
+              Dashboard
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                handleCreateExam
+              }
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 hover:text-indigo-600"
+            >
+              <Plus className="h-4 w-4" />
+
+              Create Exam
+            </button>
+
+            <button
+              type="button"
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 hover:text-indigo-600"
+            >
+              <Users className="h-4 w-4" />
+
+              Students
+            </button>
+          </nav>
+
+          {/* DESKTOP USER */}
+
+          <div className="hidden items-center gap-3 md:flex">
+
+            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-indigo-100 to-violet-100 text-sm font-black text-indigo-700">
+              {user?.profilePicture ? (
+                <img
+                  src={
+                    user.profilePicture
+                  }
+                  alt={
+                    user.name
+                  }
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                user?.name
+                  ?.charAt(0)
+                  .toUpperCase() ||
+                "I"
+              )}
+            </div>
+
+            <div className="hidden lg:block">
+              <p className="text-sm font-bold text-slate-900">
+                {user?.name ||
+                  "Instructor"}
+              </p>
+
+              <p className="text-[11px] font-semibold text-slate-400">
+                Instructor
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                handleLogout
+              }
+              disabled={
+                loggingOut
+              }
+              className="ml-2 rounded-xl p-2.5 text-slate-400 transition hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Logout"
+            >
+              {loggingOut ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <LogOut className="h-5 w-5" />
+              )}
+            </button>
+          </div>
+
+          {/* MOBILE MENU */}
+
+          <button
+            type="button"
+            onClick={() =>
+              setMobileMenuOpen(
+                (value) =>
+                  !value
+              )
+            }
+            className="rounded-xl p-2.5 text-slate-600 transition hover:bg-slate-100 md:hidden"
+            aria-label="Toggle navigation"
+          >
+            {mobileMenuOpen ? (
+              <X className="h-5 w-5" />
+            ) : (
+              <Menu className="h-5 w-5" />
+            )}
+          </button>
+        </div>
+
+        {/* MOBILE NAV */}
+
+        {mobileMenuOpen && (
+          <div className="border-t border-slate-100 bg-white px-4 py-4 md:hidden">
+            <div className="space-y-2">
 
               <button
                 type="button"
                 onClick={() =>
-                  setSidebarOpen(true)
+                  setMobileMenuOpen(
+                    false
+                  )
                 }
-                className="
-                  flex
-                  h-10
-                  w-10
-                  items-center
-                  justify-center
-                  rounded-xl
-                  border
-                  border-slate-200
-                  bg-white
-                  text-slate-600
-                  shadow-sm
-                  lg:hidden
-                "
+                className="flex w-full items-center gap-3 rounded-xl bg-indigo-50 px-4 py-3 text-sm font-bold text-indigo-600"
               >
-                <Menu size={20} />
+                <LayoutDashboard className="h-4 w-4" />
+
+                Dashboard
               </button>
 
-              <div className="hidden sm:block">
-                <p className="text-xs font-medium text-slate-400">
-                  Instructor Workspace
-                </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(
+                    false
+                  );
 
-                <p className="text-sm font-semibold text-slate-800">
-                  Academic Assessment Center
-                </p>
-              </div>
-            </div>
+                  handleCreateExam();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+              >
+                <Plus className="h-4 w-4" />
 
-            <div className="flex items-center gap-2 sm:gap-3">
-              {/* SEARCH */}
+                Create Exam
+              </button>
 
-              <div className="hidden w-[240px] items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 md:flex">
-                <Search
-                  size={16}
-                  className="text-slate-400"
-                />
+              <button
+                type="button"
+                onClick={
+                  handleLogout
+                }
+                disabled={
+                  loggingOut
+                }
+                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-red-500 transition hover:bg-red-50 disabled:opacity-50"
+              >
+                <LogOut className="h-4 w-4" />
 
-                <input
-                  value={search}
-                  onChange={(event) =>
-                    setSearch(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Search exams..."
-                  className="
-                    h-10
-                    w-full
-                    bg-transparent
-                    text-sm
-                    text-slate-700
-                    outline-none
-                    placeholder:text-slate-400
-                  "
-                />
-              </div>
-
-              {/* NOTIFICATIONS */}
-
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setNotificationsOpen(
-                      (current) =>
-                        !current
-                    )
-                  }
-                  className="
-                    relative
-                    flex
-                    h-10
-                    w-10
-                    items-center
-                    justify-center
-                    rounded-xl
-                    border
-                    border-slate-200
-                    bg-white
-                    text-slate-500
-                    shadow-sm
-                    transition
-                    hover:border-indigo-200
-                    hover:bg-indigo-50
-                    hover:text-indigo-600
-                  "
-                >
-                  <Bell size={18} />
-
-                  <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-violet-500 ring-2 ring-white" />
-                </button>
-
-                {notificationsOpen && (
-                  <div className="absolute right-0 top-12 w-[300px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-                    <div className="border-b border-slate-100 p-4">
-                      <p className="font-semibold text-slate-900">
-                        Notifications
-                      </p>
-
-                      <p className="mt-1 text-xs text-slate-400">
-                        Your latest workspace updates
-                      </p>
-                    </div>
-
-                    <div className="p-4">
-                      <div className="flex gap-3 rounded-xl bg-indigo-50 p-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-                          <Activity
-                            size={16}
-                          />
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-semibold text-slate-800">
-                            Instructor portal ready
-                          </p>
-
-                          <p className="mt-1 text-[11px] leading-4 text-slate-500">
-                            Create and manage your BCA
-                            assessments from here.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* PROFILE */}
-
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setProfileOpen(
-                      (current) =>
-                        !current
-                    )
-                  }
-                  className="
-                    flex
-                    items-center
-                    gap-2
-                    rounded-xl
-                    border
-                    border-slate-200
-                    bg-white
-                    px-2
-                    py-1.5
-                    shadow-sm
-                    transition
-                    hover:border-indigo-200
-                  "
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 text-[11px] font-bold text-white">
-                    {getInitials(
-                      user?.name
-                    )}
-                  </div>
-
-                  <div className="hidden text-left sm:block">
-                    <p className="max-w-[110px] truncate text-xs font-semibold text-slate-800">
-                      {user?.name ||
-                        "Instructor"}
-                    </p>
-
-                    <p className="text-[10px] text-slate-400">
-                      Instructor
-                    </p>
-                  </div>
-
-                  <ChevronDown
-                    size={15}
-                    className="hidden text-slate-400 sm:block"
-                  />
-                </button>
-
-                {profileOpen && (
-                  <div className="absolute right-0 top-12 w-[220px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
-                    <div className="border-b border-slate-100 px-3 py-3">
-                      <p className="text-sm font-semibold text-slate-900">
-                        {user?.name ||
-                          "Instructor"}
-                      </p>
-
-                      <p className="mt-1 truncate text-xs text-slate-400">
-                        {user?.email ||
-                          "Instructor account"}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        navigate(
-                          "/instructor/profile"
-                        )
-                      }
-                      className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-slate-600 hover:bg-slate-50"
-                    >
-                      <GraduationCap
-                        size={16}
-                      />
-
-                      Profile
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-red-500 hover:bg-red-50"
-                    >
-                      <LogOut
-                        size={16}
-                      />
-
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
+                Logout
+              </button>
             </div>
           </div>
-        </header>
+        )}
+      </header>
+
+      {/* ==================================================
+          MAIN
+      ================================================== */}
+
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+
+        {/* ERROR */}
+
+        {error && (
+          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm font-semibold text-red-700">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+
+            <span className="leading-6">
+              {error}
+            </span>
+
+            <button
+              type="button"
+              onClick={() =>
+                setError("")
+              }
+              className="ml-auto rounded-lg p-1 transition hover:bg-red-100"
+              aria-label="Close error"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* =================================================
-            CONTENT
+            HERO
         ================================================= */}
 
-        <main className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          {/* HERO */}
+        <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-indigo-700 via-violet-700 to-purple-700 p-6 text-white shadow-xl shadow-indigo-200 sm:p-8">
 
-          <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#11163b] via-[#25206c] to-[#6514b8] p-6 text-white shadow-xl shadow-indigo-900/10 sm:p-8">
-            <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+          <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
 
-            <div className="absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-fuchsia-400/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-fuchsia-400/10 blur-3xl" />
 
-            <div className="relative z-10 max-w-3xl">
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-indigo-100 backdrop-blur">
-                <Sparkles size={14} />
+          <div className="relative flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
 
-                BCA Assessment Portal
+            <div className="max-w-2xl">
+
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider backdrop-blur">
+                <Sparkles className="h-4 w-4" />
+
+                Instructor Workspace
               </div>
 
-              <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">
-                Welcome back,
-                {user?.name
-                  ? ` ${
-                      user.name.split(
-                        " "
-                      )[0]
-                    }`
-                  : " Instructor"}{" "}
-                👋
-              </h1>
+              <h2 className="text-3xl font-black tracking-tight sm:text-4xl">
+                Welcome back,{" "}
+                {user?.name ||
+                  "Instructor"}
+                .
+              </h2>
 
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-indigo-100/80 sm:text-base">
-                Build engaging assessments,
-                manage question banks, assign
-                exams to BCA students, and
-                understand performance from one
+              <p className="mt-3 max-w-xl text-sm leading-6 text-indigo-100 sm:text-base">
+                Create structured BCA
+                assessments, manage question
+                banks, assign exams to students,
+                and review performance from one
                 workspace.
               </p>
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+
                 <button
                   type="button"
                   onClick={
                     handleCreateExam
                   }
-                  className="
-                    inline-flex
-                    items-center
-                    justify-center
-                    gap-2
-                    rounded-xl
-                    bg-white
-                    px-5
-                    py-3
-                    text-sm
-                    font-bold
-                    text-indigo-700
-                    shadow-lg
-                    transition
-                    hover:-translate-y-0.5
-                    hover:shadow-xl
-                  "
+                  className="flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-extrabold text-indigo-700 shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl"
                 >
-                  <Plus size={17} />
+                  <Plus className="h-4 w-4" />
 
                   Create New Exam
-
-                  <ArrowRight
-                    size={16}
-                  />
                 </button>
 
                 <button
                   type="button"
                   onClick={() =>
-                    navigate(
-                      "/instructor/results"
-                    )
+                    document
+                      .getElementById(
+                        "exam-list"
+                      )
+                      ?.scrollIntoView({
+                        behavior:
+                          "smooth",
+                      })
                   }
-                  className="
-                    inline-flex
-                    items-center
-                    justify-center
-                    gap-2
-                    rounded-xl
-                    border
-                    border-white/20
-                    bg-white/10
-                    px-5
-                    py-3
-                    text-sm
-                    font-semibold
-                    text-white
-                    backdrop-blur
-                    transition
-                    hover:bg-white/15
-                  "
+                  className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-bold text-white backdrop-blur transition hover:bg-white/20"
                 >
-                  <BarChart3
-                    size={17}
-                  />
+                  <BookOpen className="h-4 w-4" />
 
-                  View Analytics
+                  Manage Exams
                 </button>
               </div>
             </div>
-          </section>
 
-          {/* STATS */}
+            {/* SECURITY CARD */}
 
-          <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {/* TOTAL EXAMS */}
+            <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur-xl">
 
-            <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Total Exams
-                  </p>
+              <div className="flex items-center gap-3">
 
-                  <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">
-                    {
-                      displayExams.length
-                    }
-                  </p>
-
-                  <p className="mt-1 text-xs text-emerald-600">
-                    {publishedCount}{" "}
-                    published
-                    {draftCount >
-                      0 &&
-                      ` · ${draftCount} draft`}
-                  </p>
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10">
+                  <ShieldCheck className="h-5 w-5 text-emerald-300" />
                 </div>
 
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                  <BookOpen
-                    size={20}
-                  />
+                <div>
+                  <p className="text-sm font-extrabold">
+                    Secure assessment
+                    controls
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-indigo-100">
+                    Server-side exam timing
+                    and protected instructor
+                    tools
+                  </p>
                 </div>
               </div>
             </div>
+          </div>
+        </section>
 
-            {/* QUESTION BANK */}
+        {/* =================================================
+            STATISTICS
+        ================================================= */}
 
-            <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Question Bank
-                  </p>
+        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
-                  <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">
-                    {
-                      totalQuestions
-                    }
-                  </p>
+          <StatCard
+            icon={
+              <BookOpen className="h-5 w-5" />
+            }
+            label="Total Exams"
+            value={
+              exams.length
+            }
+            description="Created in your workspace"
+          />
 
-                  <p className="mt-1 text-xs text-slate-400">
-                    Across your exams
-                  </p>
-                </div>
+          <StatCard
+            icon={
+              <CheckCircle2 className="h-5 w-5" />
+            }
+            label="Published"
+            value={
+              publishedCount
+            }
+            description="Available for students"
+            positive
+          />
 
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
-                  <FileQuestion
-                    size={20}
-                  />
-                </div>
-              </div>
-            </div>
+          <StatCard
+            icon={
+              <FileQuestion className="h-5 w-5" />
+            }
+            label="Question Capacity"
+            value={
+              totalQuestions
+            }
+            description="Configured across exams"
+          />
 
-            {/* STUDENT REACH */}
+          <StatCard
+            icon={
+              <Users className="h-5 w-5" />
+            }
+            label="Draft Exams"
+            value={
+              draftCount
+            }
+            description="Still being prepared"
+          />
+        </section>
 
-            <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Student Reach
-                  </p>
+        {/* =================================================
+            EXAM LIST
+        ================================================= */}
 
-                  <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">
-                    —
-                  </p>
+        <section
+          id="exam-list"
+          className="mt-10"
+        >
 
-                  <p className="mt-1 text-xs text-slate-400">
-                    Assignment analytics coming
-                  </p>
-                </div>
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-fuchsia-50 text-fuchsia-600">
-                  <Users size={20} />
-                </div>
-              </div>
-            </div>
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-indigo-600">
+                Assessment Manager
+              </p>
 
-            {/* ASSESSMENT TIME */}
+              <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-900">
+                Your Exams
+              </h3>
 
-            <div className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Assessment Time
-                  </p>
-
-                  <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">
-                    {totalDuration}
-
-                    <span className="ml-1 text-sm font-semibold text-slate-400">
-                      min
-                    </span>
-                  </p>
-
-                  <p className="mt-1 text-xs text-slate-400">
-                    Combined exam duration
-                  </p>
-                </div>
-
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                  <Clock3 size={20} />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* QUICK ACTIONS */}
-
-          <section className="mt-8">
-            <div className="mb-4">
-              <h2 className="text-lg font-bold text-slate-900">
-                Quick Actions
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-400">
-                Get to the most important instructor
-                tasks quickly.
+              <p className="mt-1 text-sm text-slate-500">
+                Manage exams and open their
+                question banks.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {/* CREATE EXAM */}
+            <button
+              type="button"
+              onClick={
+                handleCreateExam
+              }
+              className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
+            >
+              <Plus className="h-4 w-4" />
 
-              <button
-                type="button"
-                onClick={
-                  handleCreateExam
-                }
-                className="group rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5 text-left transition hover:-translate-y-1 hover:border-indigo-200 hover:shadow-lg"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/20">
-                  <Plus size={20} />
-                </div>
+              New Exam
+            </button>
+          </div>
 
-                <h3 className="mt-4 font-bold text-slate-900">
-                  Create Exam
-                </h3>
+          {/* SEARCH / FILTER */}
 
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Build a new BCA assessment
-                  with duration and scoring
-                  rules.
-                </p>
+          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
 
-                <div className="mt-4 flex items-center gap-1 text-xs font-bold text-indigo-600">
-                  Start building
+            <div className="grid gap-3 md:grid-cols-[1fr_180px]">
 
-                  <ArrowRight
-                    size={14}
-                    className="transition group-hover:translate-x-1"
-                  />
-                </div>
-              </button>
+              <div className="relative">
 
-              {/* QUESTION BANK */}
+                <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
 
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    "/instructor/questions"
-                  )
-                }
-                className="group rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 to-white p-5 text-left transition hover:-translate-y-1 hover:border-violet-200 hover:shadow-lg"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-white shadow-lg shadow-violet-600/20">
-                  <FileQuestion
-                    size={20}
-                  />
-                </div>
-
-                <h3 className="mt-4 font-bold text-slate-900">
-                  Question Bank
-                </h3>
-
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Add MCQs and multi-select
-                  questions to your assessments.
-                </p>
-
-                <div className="mt-4 flex items-center gap-1 text-xs font-bold text-violet-600">
-                  Manage questions
-
-                  <ArrowRight
-                    size={14}
-                    className="transition group-hover:translate-x-1"
-                  />
-                </div>
-              </button>
-
-              {/* ASSIGN EXAM */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    "/instructor/assignments"
-                  )
-                }
-                className="group rounded-2xl border border-fuchsia-100 bg-gradient-to-br from-fuchsia-50 to-white p-5 text-left transition hover:-translate-y-1 hover:border-fuchsia-200 hover:shadow-lg"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-600/20">
-                  <Target size={20} />
-                </div>
-
-                <h3 className="mt-4 font-bold text-slate-900">
-                  Assign Exam
-                </h3>
-
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Assign assessments to
-                  selected BCA students or
-                  academic groups.
-                </p>
-
-                <div className="mt-4 flex items-center gap-1 text-xs font-bold text-fuchsia-600">
-                  Manage assignments
-
-                  <ArrowRight
-                    size={14}
-                    className="transition group-hover:translate-x-1"
-                  />
-                </div>
-              </button>
-
-              {/* RESULTS */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    "/instructor/results"
-                  )
-                }
-                className="group rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5 text-left transition hover:-translate-y-1 hover:border-emerald-200 hover:shadow-lg"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
-                  <BarChart3
-                    size={20}
-                  />
-                </div>
-
-                <h3 className="mt-4 font-bold text-slate-900">
-                  View Results
-                </h3>
-
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Review scores, submissions,
-                  and detailed student performance.
-                </p>
-
-                <div className="mt-4 flex items-center gap-1 text-xs font-bold text-emerald-600">
-                  Open analytics
-
-                  <ArrowRight
-                    size={14}
-                    className="transition group-hover:translate-x-1"
-                  />
-                </div>
-              </button>
-            </div>
-          </section>
-
-          {/* RECENT ASSESSMENTS */}
-
-          <section className="mt-8">
-            <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  Recent Assessments
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-400">
-                  Your latest BCA exams and their
-                  configuration.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(
-                    "/instructor/exams"
-                  )
-                }
-                className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
-              >
-                View all exams
-
-                <ArrowRight
-                  size={15}
-                />
-              </button>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              {/* MOBILE SEARCH */}
-
-              <div className="border-b border-slate-100 p-4 md:hidden">
-                <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3">
-                  <Search
-                    size={16}
-                    className="text-slate-400"
-                  />
-
-                  <input
-                    value={search}
-                    onChange={(event) =>
-                      setSearch(
-                        event.target.value
-                      )
-                    }
-                    placeholder="Search exams..."
-                    className="h-10 w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
-                  />
-                </div>
-              </div>
-
-              {/* LOADING */}
-
-              {loading && (
-                <div className="space-y-3 p-5">
-                  {[1, 2, 3].map(
-                    (item) => (
-                      <div
-                        key={item}
-                        className="h-20 animate-pulse rounded-xl bg-slate-100"
-                      />
+                <input
+                  type="text"
+                  value={
+                    search
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setSearch(
+                      event.target.value
                     )
-                  )}
-                </div>
+                  }
+                  placeholder="Search exams or subjects..."
+                  className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
+                />
+              </div>
+
+              <select
+                value={
+                  statusFilter
+                }
+                onChange={(
+                  event
+                ) =>
+                  setStatusFilter(
+                    event.target
+                      .value as
+                      | "all"
+                      | "published"
+                      | "draft"
+                  )
+                }
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
+              >
+                <option value="all">
+                  All Exams
+                </option>
+
+                <option value="published">
+                  Published
+                </option>
+
+                <option value="draft">
+                  Drafts
+                </option>
+              </select>
+            </div>
+          </div>
+
+          {/* =================================================
+              EMPTY STATE
+          ================================================= */}
+
+          {filteredExams.length ===
+          0 ? (
+            <div className="rounded-[24px] border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500">
+                <BookOpen className="h-7 w-7" />
+              </div>
+
+              <h4 className="mt-4 text-lg font-black text-slate-900">
+                {exams.length ===
+                0
+                  ? "No exams yet"
+                  : "No matching exams"}
+              </h4>
+
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                {exams.length ===
+                0
+                  ? "Create your first BCA exam and then build its question bank."
+                  : "Try changing your search or status filter."}
+              </p>
+
+              {exams.length ===
+                0 && (
+                <button
+                  type="button"
+                  onClick={
+                    handleCreateExam
+                  }
+                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700"
+                >
+                  <Plus className="h-4 w-4" />
+
+                  Create First Exam
+                </button>
               )}
+            </div>
+          ) : (
+            /* =================================================
+               EXAM CARDS
+            ================================================= */
 
-              {/* EMPTY */}
+            <div className="grid gap-5 lg:grid-cols-2">
 
-              {!loading &&
-                filteredExams.length ===
-                  0 && (
-                  <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                      <BookOpen
-                        size={24}
-                      />
+              {filteredExams.map(
+                (
+                  exam
+                ) => (
+                  <article
+                    key={
+                      exam._id
+                    }
+                    className="group overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lg"
+                  >
+
+                    {/* CARD HEADER */}
+
+                    <div className="border-b border-slate-100 p-5 sm:p-6">
+
+                      <div className="flex items-start justify-between gap-4">
+
+                        <div className="flex min-w-0 items-start gap-3">
+
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-50 to-violet-100 text-indigo-600">
+                            <GraduationCap className="h-5 w-5" />
+                          </div>
+
+                          <div className="min-w-0">
+                            <h4 className="truncate text-lg font-black text-slate-900">
+                              {
+                                exam.title
+                              }
+                            </h4>
+
+                            <p className="mt-1 truncate text-sm font-medium text-slate-500">
+                              {exam.subject ||
+                                "BCA Assessment"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold ${
+                            exam.published
+                              ? "bg-emerald-50 text-emerald-600"
+                              : "bg-amber-50 text-amber-600"
+                          }`}
+                        >
+                          {exam.published
+                            ? "Published"
+                            : "Draft"}
+                        </span>
+                      </div>
+
+                      {/* ACADEMIC TAGS */}
+
+                      <div className="mt-5 flex flex-wrap gap-2">
+
+                        <span className="rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-bold text-indigo-600">
+                          {exam.degree ||
+                            "BCA"}
+                        </span>
+
+                        <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-600">
+                          {getYearLabel(
+                            exam.yearOfStudy
+                          )}
+                        </span>
+
+                        <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-600">
+                          {getSemesterLabel(
+                            exam.semester
+                          )}
+                        </span>
+
+                      </div>
                     </div>
 
-                    <h3 className="mt-4 font-bold text-slate-900">
-                      No assessments found
-                    </h3>
+                    {/* EXAM METRICS */}
 
-                    <p className="mt-1 max-w-sm text-sm text-slate-400">
-                      Create your first BCA assessment
-                      to start building your question
-                      bank.
-                    </p>
+                    <div className="grid grid-cols-3 divide-x divide-slate-100 border-b border-slate-100">
 
-                    <button
-                      type="button"
-                      onClick={
-                        handleCreateExam
-                      }
-                      className="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700"
-                    >
-                      <Plus size={16} />
+                      <ExamMetric
+                        icon={
+                          <Clock3 className="h-4 w-4" />
+                        }
+                        value={`${exam.duration} min`}
+                        label="Duration"
+                      />
 
-                      Create Exam
-                    </button>
-                  </div>
-                )}
+                      <ExamMetric
+                        icon={
+                          <FileQuestion className="h-4 w-4" />
+                        }
+                        value={
+                          exam.questionCount
+                        }
+                        label="Questions"
+                      />
 
-              {/* DESKTOP TABLE */}
+                      <ExamMetric
+                        icon={
+                          <Users className="h-4 w-4" />
+                        }
+                        value={
+                          exam.allowedAttempts ||
+                          1
+                        }
+                        label="Attempts"
+                      />
 
-              {!loading &&
-                filteredExams.length >
-                  0 && (
-                  <div className="hidden overflow-x-auto md:block">
-                    <table className="w-full min-w-[760px]">
-                      <thead>
-                        <tr className="border-b border-slate-100 bg-slate-50/70">
-                          <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Assessment
-                          </th>
+                    </div>
 
-                          <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Academic
-                          </th>
+                    {/* ACTIONS */}
 
-                          <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Questions
-                          </th>
+                    <div className="flex flex-col gap-2 p-5 sm:flex-row sm:p-6">
 
-                          <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Duration
-                          </th>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleQuestionBank(
+                            exam._id
+                          )
+                        }
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-3 text-sm font-extrabold text-white shadow-md shadow-indigo-100 transition hover:-translate-y-0.5 hover:shadow-lg"
+                      >
+                        <FileQuestion className="h-4 w-4" />
 
-                          <th className="px-5 py-4 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Status
-                          </th>
+                        Question Bank
 
-                          <th className="px-5 py-4 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Action
-                          </th>
-                        </tr>
-                      </thead>
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
 
-                      <tbody className="divide-y divide-slate-100">
-                        {filteredExams
-                          .slice(0, 8)
-                          .map(
-                            (
-                              exam
-                            ) => (
-                              <tr
-                                key={
-                                  exam._id
-                                }
-                                className="group transition hover:bg-slate-50/70"
-                              >
-                                <td className="px-5 py-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                                      <BookOpen
-                                        size={
-                                          18
-                                        }
-                                      />
-                                    </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleManageExam(
+                            exam._id
+                          )
+                        }
+                        className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+                      >
+                        <Settings className="h-4 w-4" />
 
-                                    <div>
-                                      <p className="font-semibold text-slate-800">
-                                        {
-                                          exam.title
-                                        }
-                                      </p>
+                        Manage
+                      </button>
 
-                                      <p className="mt-0.5 text-xs text-slate-400">
-                                        {exam.subject ||
-                                          "Academic Assessment"}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </td>
+                    </div>
+                  </article>
+                )
+              )}
 
-                                <td className="px-5 py-4">
-                                  <div>
-                                    <p className="text-sm font-medium text-slate-700">
-                                      {exam.degree ||
-                                        "BCA"}
-                                    </p>
-
-                                    <p className="mt-0.5 text-xs text-slate-400">
-                                      {getYearLabel(
-                                        exam.yearOfStudy
-                                      )}{" "}
-                                      ·{" "}
-                                      {getSemesterLabel(
-                                        exam.semester
-                                      )}
-                                    </p>
-                                  </div>
-                                </td>
-
-                                <td className="px-5 py-4">
-                                  <span className="text-sm font-semibold text-slate-700">
-                                    {
-                                      exam.questionCount
-                                    }
-                                  </span>
-
-                                  <span className="ml-1 text-xs text-slate-400">
-                                    questions
-                                  </span>
-                                </td>
-
-                                <td className="px-5 py-4">
-                                  <div className="flex items-center gap-1.5 text-sm font-medium text-slate-700">
-                                    <Clock3
-                                      size={
-                                        15
-                                      }
-                                      className="text-slate-400"
-                                    />
-
-                                    {
-                                      exam.duration
-                                    }{" "}
-                                    min
-                                  </div>
-                                </td>
-
-                                <td className="px-5 py-4">
-                                  {exam.published !==
-                                  false ? (
-                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-
-                                      Published
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
-                                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-
-                                      Draft
-                                    </span>
-                                  )}
-                                </td>
-
-                                <td className="px-5 py-4 text-right">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      navigate(
-                                        `/instructor/exams/${exam._id}`
-                                      )
-                                    }
-                                    className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50"
-                                  >
-                                    Manage
-
-                                    <ArrowRight
-                                      size={
-                                        13
-                                      }
-                                    />
-                                  </button>
-                                </td>
-                              </tr>
-                            )
-                          )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-              {/* MOBILE CARDS */}
-
-              {!loading &&
-                filteredExams.length >
-                  0 && (
-                  <div className="space-y-3 p-4 md:hidden">
-                    {filteredExams
-                      .slice(0, 8)
-                      .map(
-                        (
-                          exam
-                        ) => (
-                          <div
-                            key={
-                              exam._id
-                            }
-                            className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4"
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                                <BookOpen
-                                  size={
-                                    18
-                                  }
-                                />
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <p className="truncate text-sm font-bold text-slate-800">
-                                      {
-                                        exam.title
-                                      }
-                                    </p>
-
-                                    <p className="mt-1 truncate text-xs text-slate-400">
-                                      {exam.subject ||
-                                        "Academic Assessment"}
-                                    </p>
-                                  </div>
-
-                                  {exam.published !==
-                                  false ? (
-                                    <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-bold text-emerald-700">
-                                      LIVE
-                                    </span>
-                                  ) : (
-                                    <span className="shrink-0 rounded-full bg-amber-50 px-2 py-1 text-[9px] font-bold text-amber-700">
-                                      DRAFT
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div className="mt-4 grid grid-cols-3 gap-2">
-                                  <div className="rounded-xl bg-white p-2.5">
-                                    <p className="text-[9px] uppercase tracking-wide text-slate-400">
-                                      Questions
-                                    </p>
-
-                                    <p className="mt-1 text-sm font-bold text-slate-700">
-                                      {
-                                        exam.questionCount
-                                      }
-                                    </p>
-                                  </div>
-
-                                  <div className="rounded-xl bg-white p-2.5">
-                                    <p className="text-[9px] uppercase tracking-wide text-slate-400">
-                                      Duration
-                                    </p>
-
-                                    <p className="mt-1 text-sm font-bold text-slate-700">
-                                      {
-                                        exam.duration
-                                      }{" "}
-                                      m
-                                    </p>
-                                  </div>
-
-                                  <div className="rounded-xl bg-white p-2.5">
-                                    <p className="text-[9px] uppercase tracking-wide text-slate-400">
-                                      Year
-                                    </p>
-
-                                    <p className="mt-1 text-sm font-bold text-slate-700">
-                                      {exam.yearOfStudy ||
-                                        "All"}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    navigate(
-                                      `/instructor/exams/${exam._id}`
-                                    )
-                                  }
-                                  className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-white py-2.5 text-xs font-bold text-indigo-600 shadow-sm ring-1 ring-slate-200"
-                                >
-                                  Manage Assessment
-
-                                  <ArrowRight
-                                    size={
-                                      13
-                                    }
-                                  />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      )}
-                  </div>
-                )}
             </div>
-          </section>
+          )}
+        </section>
+      </main>
 
-          {/* INFORMATION */}
+      {/* ==================================================
+          FOOTER
+      ================================================== */}
 
-          <section className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-start gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                  <CheckCircle2
-                    size={21}
-                  />
-                </div>
+      <footer className="mt-12 border-t border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-6 text-center text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:text-left lg:px-8">
 
-                <div>
-                  <h3 className="font-bold text-slate-900">
-                    Server-controlled assessments
-                  </h3>
+          <p>
+            © 2026 ExamForge ·
+            Instructor Portal
+          </p>
 
-                  <p className="mt-1 text-sm leading-6 text-slate-500">
-                    ExamForge keeps exam rules,
-                    timing, answers, and scoring on
-                    the backend so student-side
-                    changes cannot determine the
-                    final result.
-                  </p>
-                </div>
-              </div>
-            </div>
+          <p className="font-medium">
+            Create. Assess. Understand.
+          </p>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-start gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                  <GraduationCap
-                    size={21}
-                  />
-                </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
 
-                <div>
-                  <h3 className="font-bold text-slate-900">
-                    Built for BCA students
-                  </h3>
+// ======================================================
+// STAT CARD
+// ======================================================
 
-                  <p className="mt-1 text-sm leading-6 text-slate-500">
-                    Organize assessments by BCA year,
-                    semester, subject, and student
-                    assignments as your instructor
-                    workspace grows.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </section>
+function StatCard({
+  icon,
+  label,
+  value,
+  description,
+  positive = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number;
+  description: string;
+  positive?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
 
-          {/* FOOTER */}
+      <div className="flex items-start justify-between gap-3">
 
-          <footer className="mt-10 flex flex-col items-center justify-between gap-2 border-t border-slate-200 py-6 text-center text-xs text-slate-400 sm:flex-row sm:text-left">
-            <p>
-              ©{" "}
-              {new Date().getFullYear()}{" "}
-              ExamForge. Academic Assessment
-              Platform.
-            </p>
+        <div
+          className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+            positive
+              ? "bg-emerald-50 text-emerald-600"
+              : "bg-indigo-50 text-indigo-600"
+          }`}
+        >
+          {icon}
+        </div>
 
-            <div className="flex items-center gap-4">
-              <span>
-                Instructor Portal
-              </span>
+        {positive && (
+          <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-extrabold text-emerald-600">
+            Active
+          </span>
+        )}
 
-              <span className="h-1 w-1 rounded-full bg-slate-300" />
-
-              <span>
-                Secure Workspace
-              </span>
-            </div>
-          </footer>
-        </main>
       </div>
+
+      <p className="mt-5 text-2xl font-black tracking-tight text-slate-900">
+        {value}
+      </p>
+
+      <p className="mt-1 text-sm font-bold text-slate-700">
+        {label}
+      </p>
+
+      <p className="mt-1 text-xs font-medium text-slate-400">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+// ======================================================
+// EXAM METRIC
+// ======================================================
+
+function ExamMetric({
+  icon,
+  value,
+  label,
+}: {
+  icon: ReactNode;
+  value: string | number;
+  label: string;
+}) {
+  return (
+    <div className="px-3 py-4 text-center">
+
+      <div className="flex items-center justify-center gap-1.5 text-indigo-500">
+        {icon}
+
+        <span className="text-sm font-black text-slate-800">
+          {value}
+        </span>
+      </div>
+
+      <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        {label}
+      </p>
+
     </div>
   );
 }

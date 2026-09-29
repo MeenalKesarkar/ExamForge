@@ -2,19 +2,18 @@ import {
   useEffect,
   useMemo,
   useState,
+  type FormEvent,
 } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
 import {
   ArrowLeft,
   BookOpen,
-  Check,
   CheckCircle2,
   ChevronDown,
   CircleHelp,
   Edit3,
   FileQuestion,
-  Filter,
-  ListChecks,
   Loader2,
   Plus,
   Save,
@@ -23,1535 +22,982 @@ import {
   X,
 } from "lucide-react";
 
-import {
-  useNavigate,
-  useParams,
-} from "react-router-dom";
+interface Exam {
+  _id: string;
+  title: string;
+  subject?: string;
+  degree?: string;
+  yearOfStudy?: number;
+  semester?: number;
+  duration: number;
+  questionCount: number;
+  totalMarks: number;
+  passingMarks: number;
+  negativeMarking?: boolean;
+  negativePenalty?: number;
+  published?: boolean;
+}
 
-// ======================================================
-// CONFIG
-// ======================================================
-
-const API_URL =
-  "http://localhost:5000/api";
-
-// ======================================================
-// TYPES
-// ======================================================
-
-type QuestionType =
-  | "single"
-  | "multi";
-
-type Difficulty =
-  | "easy"
-  | "medium"
-  | "hard";
+type QuestionType = "single" | "multi";
 
 interface Question {
   _id: string;
-
+  examId: string;
   questionText: string;
-
   type: QuestionType;
-
   options: string[];
-
   correctAnswers: string[];
-
   marks: number;
-
   explanation?: string;
-
-  difficulty?: Difficulty;
-
+  difficulty?: "easy" | "medium" | "hard";
   order?: number;
 }
 
-interface Exam {
-  _id: string;
-
-  title: string;
-
-  subject?: string;
-
-  degree?: string;
-
-  yearOfStudy?: number;
-
-  semester?: number;
-
-  duration: number;
-
-  questionCount: number;
-
-  totalMarks: number;
-
-  passingMarks: number;
-
-  negativeMarking: boolean;
-
-  negativePenalty: number;
-
-  allowedAttempts?: number;
-
-  published: boolean;
-}
-
-interface QuestionForm {
+interface FormState {
   questionText: string;
-
   type: QuestionType;
-
   options: string[];
-
   correctAnswers: string[];
-
   marks: number;
-
   explanation: string;
-
-  difficulty: Difficulty;
+  difficulty: "easy" | "medium" | "hard";
 }
 
-// ======================================================
-// INITIAL FORM
-// ======================================================
+const API_URL = "http://localhost:5000/api";
 
-const emptyQuestion: QuestionForm = {
+const emptyForm: FormState = {
   questionText: "",
-
   type: "single",
-
-  options: [
-    "",
-    "",
-    "",
-    "",
-  ],
-
+  options: ["", "", "", ""],
   correctAnswers: [],
-
   marks: 1,
-
   explanation: "",
-
   difficulty: "medium",
 };
 
-// ======================================================
-// COMPONENT
-// ======================================================
+function getYearLabel(year?: number) {
+  if (!year) return "Year not set";
+  return `${year}${year === 1 ? "st" : year === 2 ? "nd" : "rd"} Year`;
+}
+
+function getSemesterLabel(semester?: number) {
+  if (!semester) return "Semester not set";
+  return `Semester ${semester}`;
+}
 
 function QuestionBank() {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
+  const { examId } = useParams<{ examId: string }>();
 
-  const { examId } =
-    useParams<{
-      examId: string;
-    }>();
+  const [exam, setExam] = useState<Exam | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
 
-  // ====================================================
-  // STATE
-  // ====================================================
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const [exam, setExam] =
-    useState<Exam | null>(
-      null
-    );
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const [questions, setQuestions] =
-    useState<Question[]>(
-      []
-    );
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  const [form, setForm] =
-    useState<QuestionForm>(
-      emptyQuestion
-    );
+  const [form, setForm] = useState<FormState>(emptyForm);
 
-  const [editingId, setEditingId] =
-    useState<string | null>(
-      null
-    );
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [saving, setSaving] =
-    useState(false);
-
-  const [deletingId, setDeletingId] =
-    useState<string | null>(
-      null
-    );
-
-  const [error, setError] =
-    useState("");
-
-  const [success, setSuccess] =
-    useState("");
-
-  const [search, setSearch] =
-    useState("");
-
-  const [typeFilter, setTypeFilter] =
-    useState<
-      "all" | QuestionType
-    >("all");
-
-  const [difficultyFilter, setDifficultyFilter] =
-    useState<
-      "all" | Difficulty
-    >("all");
-
-  const [showForm, setShowForm] =
-    useState(true);
-
-  // ====================================================
-  // LOAD DATA
-  // ====================================================
+  const [search, setSearch] = useState("");
+  const [difficultyFilter, setDifficultyFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
 
   useEffect(() => {
     if (!examId) {
-      setError(
-        "Exam ID is missing."
-      );
-
-      setLoading(false);
-
+      navigate("/instructor");
       return;
     }
 
-    void loadData();
+    loadData();
   }, [examId]);
 
-  // ====================================================
-  // LOAD EXAM + QUESTIONS
-  // ====================================================
+  useEffect(() => {
+    if (!success) return;
 
-  const loadData =
-    async () => {
-      try {
-        setLoading(true);
+    const timer = setTimeout(() => {
+      setSuccess("");
+    }, 3000);
 
-        setError("");
+    return () => clearTimeout(timer);
+  }, [success]);
 
-        const [
-          examResponse,
-          questionResponse,
-        ] = await Promise.all([
-          fetch(
-            `${API_URL}/exams/${examId}`,
-            {
-              credentials:
-                "include",
-            }
-          ),
+  async function loadData() {
+    if (!examId) return;
 
-          fetch(
-            `${API_URL}/questions/exam/${examId}`,
-            {
-              credentials:
-                "include",
-            }
-          ),
-        ]);
-
-        const examData =
-          await examResponse.json();
-
-        const questionData =
-          await questionResponse.json();
-
-        if (
-          !examResponse.ok
-        ) {
-          throw new Error(
-            examData?.message ||
-              "Failed to load exam"
-          );
-        }
-
-        if (
-          !questionResponse.ok
-        ) {
-          throw new Error(
-            questionData?.message ||
-              "Failed to load question bank"
-          );
-        }
-
-        setExam(
-          examData
-        );
-
-        setQuestions(
-          Array.isArray(
-            questionData
-          )
-            ? questionData
-            : questionData.questions ||
-                []
-        );
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load question bank"
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-  // ====================================================
-  // RESET FORM
-  // ====================================================
-
-  const resetForm = () => {
-    setForm(
-      emptyQuestion
-    );
-
-    setEditingId(
-      null
-    );
-
+    setLoading(true);
     setError("");
 
-    setSuccess("");
-  };
+    try {
+      const [examResponse, questionsResponse] = await Promise.all([
+        fetch(`${API_URL}/exams/${examId}`, {
+          credentials: "include",
+        }),
+        fetch(`${API_URL}/questions/exam/${examId}`, {
+          credentials: "include",
+        }),
+      ]);
 
-  // ====================================================
-  // OPEN CREATE FORM
-  // ====================================================
-
-  const openCreateForm =
-    () => {
-      resetForm();
-
-      setShowForm(true);
-
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    };
-
-  // ====================================================
-  // HANDLE TYPE CHANGE
-  // ====================================================
-
-  const changeQuestionType =
-    (
-      type: QuestionType
-    ) => {
-      setForm(
-        (current) => ({
-          ...current,
-
-          type,
-
-          correctAnswers:
-            [],
-        })
-      );
-    };
-
-  // ====================================================
-  // UPDATE OPTION
-  // ====================================================
-
-  const updateOption = (
-    index: number,
-    value: string
-  ) => {
-    setForm(
-      (current) => {
-        const options = [
-          ...current.options,
-        ];
-
-        const previousValue =
-          options[index];
-
-        options[index] =
-          value;
-
-        const correctAnswers =
-          current.correctAnswers.map(
-            (answer) =>
-              answer ===
-              previousValue
-                ? value
-                : answer
-          );
-
-        return {
-          ...current,
-
-          options,
-
-          correctAnswers,
-        };
-      }
-    );
-  };
-
-  // ====================================================
-  // TOGGLE CORRECT ANSWER
-  // ====================================================
-
-  const toggleCorrectAnswer =
-    (
-      option: string
-    ) => {
-      if (!option.trim()) {
+      if (examResponse.status === 401 || questionsResponse.status === 401) {
+        navigate("/");
         return;
       }
 
-      setForm(
-        (current) => {
-          if (
-            current.type ===
-            "single"
-          ) {
-            return {
-              ...current,
+      if (!examResponse.ok) {
+        const data = await examResponse.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to load exam");
+      }
 
-              correctAnswers: [
-                option,
-              ],
-            };
-          }
+      if (!questionsResponse.ok) {
+        const data = await questionsResponse.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to load questions");
+      }
 
-          const exists =
-            current.correctAnswers.includes(
-              option
-            );
+      const examData = await examResponse.json();
+      const questionsData = await questionsResponse.json();
 
-          return {
-            ...current,
+      setExam(examData.exam || examData);
+      setQuestions(
+        Array.isArray(questionsData.questions)
+          ? questionsData.questions
+          : []
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong while loading the question bank."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
-            correctAnswers: exists
-              ? current.correctAnswers.filter(
-                  (answer) =>
-                    answer !==
-                    option
-                )
-              : [
-                  ...current.correctAnswers,
-                  option,
-                ],
-          };
+  function openCreateForm() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setError("");
+    setSuccess("");
+    setShowForm(true);
+  }
+
+  function openEditForm(question: Question) {
+    setEditingId(question._id);
+
+    setForm({
+      questionText: question.questionText,
+      type: question.type,
+      options: [...question.options],
+      correctAnswers: [...question.correctAnswers],
+      marks: question.marks,
+      explanation: question.explanation || "",
+      difficulty: question.difficulty || "medium",
+    });
+
+    setError("");
+    setSuccess("");
+    setShowForm(true);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
+  function closeForm() {
+    if (saving) return;
+
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  }
+
+  function updateOption(index: number, value: string) {
+    setForm((current) => {
+      const options = [...current.options];
+      options[index] = value;
+
+      const oldValue = current.options[index];
+
+      const correctAnswers = current.correctAnswers.map((answer) =>
+        answer === oldValue ? value : answer
+      );
+
+      return {
+        ...current,
+        options,
+        correctAnswers,
+      };
+    });
+  }
+
+  function addOption() {
+    if (form.options.length >= 6) return;
+
+    setForm((current) => ({
+      ...current,
+      options: [...current.options, ""],
+    }));
+  }
+
+  function removeOption(index: number) {
+    if (form.options.length <= 2) return;
+
+    setForm((current) => {
+      const removedOption = current.options[index];
+
+      const options = current.options.filter(
+        (_, optionIndex) => optionIndex !== index
+      );
+
+      const correctAnswers = current.correctAnswers.filter(
+        (answer) => answer !== removedOption
+      );
+
+      return {
+        ...current,
+        options,
+        correctAnswers,
+      };
+    });
+  }
+
+  function toggleCorrectAnswer(option: string) {
+    if (!option.trim()) return;
+
+    setForm((current) => {
+      if (current.type === "single") {
+        return {
+          ...current,
+          correctAnswers: [option],
+        };
+      }
+
+      const exists = current.correctAnswers.includes(option);
+
+      return {
+        ...current,
+        correctAnswers: exists
+          ? current.correctAnswers.filter((answer) => answer !== option)
+          : [...current.correctAnswers, option],
+      };
+    });
+  }
+
+  function changeQuestionType(type: QuestionType) {
+    setForm((current) => ({
+      ...current,
+      type,
+      correctAnswers:
+        type === "single"
+          ? current.correctAnswers.slice(0, 1)
+          : current.correctAnswers,
+    }));
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+
+    if (!examId) return;
+
+    setError("");
+    setSuccess("");
+
+    const questionText = form.questionText.trim();
+
+    const options = form.options
+      .map((option) => option.trim())
+      .filter(Boolean);
+
+    const correctAnswers = form.correctAnswers
+      .map((answer) => answer.trim())
+      .filter(Boolean);
+
+    if (!questionText) {
+      setError("Please enter the question.");
+      return;
+    }
+
+    if (options.length < 2) {
+      setError("Please provide at least two options.");
+      return;
+    }
+
+    if (new Set(options).size !== options.length) {
+      setError("Options must be unique.");
+      return;
+    }
+
+    if (correctAnswers.length === 0) {
+      setError("Please select at least one correct answer.");
+      return;
+    }
+
+    if (form.type === "single" && correctAnswers.length !== 1) {
+      setError("A single-correct question must have exactly one correct answer.");
+      return;
+    }
+
+    if (
+      correctAnswers.some(
+        (answer) => !options.some((option) => option === answer)
+      )
+    ) {
+      setError("Every correct answer must match one of the options.");
+      return;
+    }
+
+    if (!Number.isFinite(form.marks) || form.marks <= 0) {
+      setError("Marks must be greater than zero.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const payload = {
+        examId,
+        questionText,
+        type: form.type,
+        options,
+        correctAnswers,
+        marks: Number(form.marks),
+        explanation: form.explanation.trim(),
+        difficulty: form.difficulty,
+        order: editingId
+          ? questions.find((question) => question._id === editingId)?.order
+          : questions.length + 1,
+      };
+
+      const response = await fetch(
+        editingId
+          ? `${API_URL}/questions/${editingId}`
+          : `${API_URL}/questions`,
+        {
+          method: editingId ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify(payload),
         }
       );
-    };
 
-  // ====================================================
-  // VALIDATE FORM
-  // ====================================================
-
-  const validateForm =
-    (): string | null => {
-      const questionText =
-        form.questionText.trim();
-
-      if (!questionText) {
-        return "Question text is required.";
+      if (response.status === 401) {
+        navigate("/");
+        return;
       }
 
-      if (
-        questionText.length <
-        5
-      ) {
-        return "Question must contain at least 5 characters.";
-      }
+      const data = await response.json().catch(() => ({}));
 
-      const cleanedOptions =
-        form.options.map(
-          (option) =>
-            option.trim()
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            (editingId
+              ? "Failed to update question."
+              : "Failed to create question.")
         );
-
-      if (
-        cleanedOptions.some(
-          (option) =>
-            !option
-        )
-      ) {
-        return "Please fill all four options.";
       }
 
-      const uniqueOptions =
-        new Set(
-          cleanedOptions.map(
-            (option) =>
-              option.toLowerCase()
+      const savedQuestion = data.question;
+
+      if (editingId) {
+        setQuestions((current) =>
+          current.map((question) =>
+            question._id === editingId
+              ? savedQuestion || { ...question, ...payload }
+              : question
           )
         );
 
-      if (
-        uniqueOptions.size !==
-        cleanedOptions.length
-      ) {
-        return "All options must be different.";
-      }
-
-      if (
-        form.correctAnswers.length ===
-        0
-      ) {
-        return "Please select at least one correct answer.";
-      }
-
-      if (
-        form.type ===
-          "single" &&
-        form.correctAnswers.length !==
-          1
-      ) {
-        return "A single-correct question must have exactly one correct answer.";
-      }
-
-      if (
-        form.type ===
-          "multi" &&
-        form.correctAnswers.length <
-          2
-      ) {
-        return "A multi-select question should have at least two correct answers.";
-      }
-
-      if (
-        !Number.isFinite(
-          form.marks
-        ) ||
-        form.marks <= 0
-      ) {
-        return "Marks must be greater than zero.";
-      }
-
-      return null;
-    };
-
-  // ====================================================
-  // SAVE QUESTION
-  // ====================================================
-
-  const saveQuestion =
-    async (
-      event: React.FormEvent
-    ) => {
-      event.preventDefault();
-
-      setError("");
-
-      setSuccess("");
-
-      const validation =
-        validateForm();
-
-      if (validation) {
-        setError(
-          validation
-        );
-
-        return;
-      }
-
-      if (!examId) {
-        setError(
-          "Exam ID is missing."
-        );
-
-        return;
-      }
-
-      try {
-        setSaving(true);
-
-        const payload = {
-          examId,
-
-          questionText:
-            form.questionText.trim(),
-
-          type: form.type,
-
-          options:
-            form.options.map(
-              (option) =>
-                option.trim()
-            ),
-
-          correctAnswers:
-            form.correctAnswers,
-
-          marks:
-            Number(form.marks),
-
-          explanation:
-            form.explanation.trim(),
-
-          difficulty:
-            form.difficulty,
-        };
-
-        const url =
-          editingId
-            ? `${API_URL}/questions/${editingId}`
-            : `${API_URL}/questions`;
-
-        const method =
-          editingId
-            ? "PUT"
-            : "POST";
-
-        const response =
-          await fetch(
-            url,
-            {
-              method,
-
-              credentials:
-                "include",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-
-                Accept:
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify(
-                  payload
-                ),
-            }
-          );
-
-        const data =
-          await response.json();
-
-        if (
-          !response.ok
-        ) {
-          throw new Error(
-            data?.message ||
-              "Failed to save question"
-          );
+        setSuccess("Question updated successfully.");
+      } else {
+        if (savedQuestion) {
+          setQuestions((current) => [...current, savedQuestion]);
+        } else {
+          await loadData();
         }
 
-        setSuccess(
-          editingId
-            ? "Question updated successfully."
-            : "Question added to the question bank."
-        );
-
-        resetForm();
-
-        await loadData();
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to save question"
-        );
-      } finally {
-        setSaving(false);
+        setSuccess("Question added successfully.");
       }
-    };
 
-  // ====================================================
-  // EDIT QUESTION
-  // ====================================================
+      closeForm();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong while saving the question."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
-  const editQuestion =
-    (
-      question: Question
-    ) => {
-      setForm({
-        questionText:
-          question.questionText,
+  async function handleDelete(questionId: string) {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this question?"
+    );
 
-        type:
-          question.type,
+    if (!confirmed) return;
 
-        options: [
-          ...question.options,
-        ],
+    setDeletingId(questionId);
+    setError("");
+    setSuccess("");
 
-        correctAnswers: [
-          ...question.correctAnswers,
-        ],
-
-        marks:
-          question.marks,
-
-        explanation:
-          question.explanation ||
-          "",
-
-        difficulty:
-          question.difficulty ||
-          "medium",
-      });
-
-      setEditingId(
-        question._id
+    try {
+      const response = await fetch(
+        `${API_URL}/questions/${questionId}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        }
       );
 
-      setShowForm(true);
-
-      setError("");
-
-      setSuccess("");
-
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    };
-
-  // ====================================================
-  // DELETE QUESTION
-  // ====================================================
-
-  const deleteQuestion =
-    async (
-      questionId: string
-    ) => {
-      const confirmed =
-        window.confirm(
-          "Delete this question from the question bank?"
-        );
-
-      if (!confirmed) {
+      if (response.status === 401) {
+        navigate("/");
         return;
       }
 
-      try {
-        setDeletingId(
-          questionId
-        );
+      const data = await response.json().catch(() => ({}));
 
-        setError("");
-
-        const response =
-          await fetch(
-            `${API_URL}/questions/${questionId}`,
-            {
-              method: "DELETE",
-
-              credentials:
-                "include",
-            }
-          );
-
-        const data =
-          await response.json();
-
-        if (
-          !response.ok
-        ) {
-          throw new Error(
-            data?.message ||
-              "Failed to delete question"
-          );
-        }
-
-        setSuccess(
-          "Question deleted successfully."
-        );
-
-        await loadData();
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to delete question"
-        );
-      } finally {
-        setDeletingId(
-          null
-        );
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to delete question.");
       }
-    };
 
-  // ====================================================
-  // FILTER QUESTIONS
-  // ====================================================
-
-  const filteredQuestions =
-    useMemo(() => {
-      const query =
-        search
-          .trim()
-          .toLowerCase();
-
-      return questions.filter(
-        (question) => {
-          const matchesSearch =
-            !query ||
-            question.questionText
-              .toLowerCase()
-              .includes(query);
-
-          const matchesType =
-            typeFilter ===
-              "all" ||
-            question.type ===
-              typeFilter;
-
-          const matchesDifficulty =
-            difficultyFilter ===
-              "all" ||
-            question.difficulty ===
-              difficultyFilter;
-
-          return (
-            matchesSearch &&
-            matchesType &&
-            matchesDifficulty
-          );
-        }
+      setQuestions((current) =>
+        current.filter((question) => question._id !== questionId)
       );
-    }, [
-      questions,
-      search,
-      typeFilter,
-      difficultyFilter,
-    ]);
 
-  // ====================================================
-  // QUESTION STATS
-  // ====================================================
+      setSuccess("Question deleted successfully.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong while deleting the question."
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
-  const singleCount =
-    questions.filter(
-      (question) =>
-        question.type ===
-        "single"
-    ).length;
+  const filteredQuestions = useMemo(() => {
+    const query = search.trim().toLowerCase();
 
-  const multiCount =
-    questions.filter(
-      (question) =>
-        question.type ===
-        "multi"
-    ).length;
+    return [...questions]
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .filter((question) => {
+        const matchesSearch =
+          !query ||
+          question.questionText.toLowerCase().includes(query) ||
+          question.options.some((option) =>
+            option.toLowerCase().includes(query)
+          );
 
-  const bankComplete =
-    exam
-      ? questions.length >=
-        exam.questionCount
-      : false;
+        const matchesDifficulty =
+          difficultyFilter === "all" ||
+          question.difficulty === difficultyFilter;
 
-  // ====================================================
-  // LOADING SCREEN
-  // ====================================================
+        const matchesType =
+          typeFilter === "all" || question.type === typeFilter;
+
+        return matchesSearch && matchesDifficulty && matchesType;
+      });
+  }, [questions, search, difficultyFilter, typeFilter]);
+
+  const totalMarks = useMemo(
+    () => questions.reduce((sum, question) => sum + question.marks, 0),
+    [questions]
+  );
+
+  const progress =
+    exam && exam.questionCount > 0
+      ? Math.min((questions.length / exam.questionCount) * 100, 100)
+      : 0;
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 shadow-lg shadow-indigo-200">
-            <Loader2 className="h-7 w-7 animate-spin text-white" />
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100">
+            <Loader2 className="h-7 w-7 animate-spin text-indigo-600" />
           </div>
 
-          <p className="mt-4 text-sm font-semibold text-slate-600">
-            Loading question bank...
+          <h2 className="text-lg font-semibold text-slate-900">
+            Loading Question Bank
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Preparing your questions...
           </p>
         </div>
       </div>
     );
   }
 
-  // ====================================================
-  // MAIN UI
-  // ====================================================
+  if (!exam) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6">
+        <div className="max-w-md rounded-3xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-100">
+            <CircleHelp className="h-7 w-7 text-red-600" />
+          </div>
+
+          <h2 className="text-xl font-bold text-slate-900">
+            Exam not found
+          </h2>
+
+          <p className="mt-2 text-sm text-slate-500">
+            We could not find the exam associated with this question bank.
+          </p>
+
+          <button
+            onClick={() => navigate("/instructor")}
+            className="mt-6 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* ==================================================
-          HEADER
-      ================================================== */}
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      {/* Header */}
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate("/instructor")}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+              title="Back to dashboard"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
 
-      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-xl">
-        <div className="mx-auto flex h-[74px] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          {/* Brand */}
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600">
+                  <BookOpen className="h-4 w-4 text-white" />
+                </div>
 
-          <button
-            type="button"
-            onClick={() =>
-              navigate(
-                "/instructor"
-              )
-            }
-            className="flex items-center gap-3"
-          >
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 shadow-lg shadow-indigo-200">
-              <BookOpen className="h-5 w-5 text-white" />
-            </div>
-
-            <div className="hidden text-left sm:block">
-              <h1 className="text-xl font-extrabold tracking-tight text-slate-900">
-                Exam
-                <span className="text-indigo-600">
-                  Forge
+                <span className="font-bold text-slate-900">
+                  ExamForge
                 </span>
-              </h1>
+              </div>
 
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                Instructor Portal
+              <p className="mt-0.5 text-xs text-slate-500">
+                Instructor • Question Bank
               </p>
             </div>
-          </button>
-
-          {/* Back */}
+          </div>
 
           <button
-            type="button"
-            onClick={() =>
-              navigate(
-                "/instructor"
-              )
-            }
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+            onClick={openCreateForm}
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
           >
-            <ArrowLeft className="h-4 w-4" />
-
-            <span className="hidden sm:inline">
-              Back to Dashboard
-            </span>
-
-            <span className="sm:hidden">
-              Back
-            </span>
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Add Question</span>
           </button>
         </div>
       </header>
 
-      {/* ==================================================
-          MAIN
-      ================================================== */}
-
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* =================================================
-            BREADCRUMB
-        ================================================= */}
-
-        <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-          <button
-            type="button"
-            onClick={() =>
-              navigate(
-                "/instructor"
-              )
-            }
-            className="font-semibold hover:text-indigo-600"
-          >
-            Instructor Dashboard
-          </button>
-
-          <span>/</span>
-
-          <span className="font-semibold text-slate-900">
-            Question Bank
-          </span>
-        </div>
-
-        {/* =================================================
-            HERO
-        ================================================= */}
-
-        <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-indigo-700 via-violet-700 to-purple-700 p-6 text-white shadow-xl shadow-indigo-200 sm:p-8">
-          <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-
-          <div className="absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-fuchsia-400/10 blur-3xl" />
-
-          <div className="relative">
-            <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
-              <div className="max-w-3xl">
-                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider backdrop-blur">
-                  <ListChecks className="h-4 w-4" />
-
-                  Question Bank
-                </div>
-
-                <h2 className="text-3xl font-black tracking-tight sm:text-4xl">
-                  Build your exam
-                  question bank.
-                </h2>
-
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-indigo-100 sm:text-base">
-                  Add single-correct MCQs
-                  and multi-select questions,
-                  define the correct answers,
-                  marks and difficulty, and
-                  prepare the bank students
-                  will receive from.
-                </p>
-
-                {exam && (
-                  <div className="mt-6 flex flex-wrap gap-2">
-                    <span className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold">
-                      {exam.title}
-                    </span>
-
-                    {exam.subject && (
-                      <span className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold">
-                        {exam.subject}
-                      </span>
-                    )}
-
-                    <span className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold">
-                      {exam.questionCount} questions
-                      per attempt
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-center backdrop-blur">
-                  <p className="text-2xl font-black">
-                    {questions.length}
-                  </p>
-
-                  <p className="mt-1 text-[11px] font-semibold text-indigo-100">
-                    Total
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-center backdrop-blur">
-                  <p className="text-2xl font-black">
-                    {singleCount}
-                  </p>
-
-                  <p className="mt-1 text-[11px] font-semibold text-indigo-100">
-                    Single
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-center backdrop-blur">
-                  <p className="text-2xl font-black">
-                    {multiCount}
-                  </p>
-
-                  <p className="mt-1 text-[11px] font-semibold text-indigo-100">
-                    Multi
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* =================================================
-            ALERTS
-        ================================================= */}
-
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        {/* Error */}
         {error && (
-          <div className="mt-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm font-semibold text-red-700">
+          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             <CircleHelp className="mt-0.5 h-5 w-5 shrink-0" />
 
-            <span>
-              {error}
-            </span>
+            <div className="flex-1">{error}</div>
 
             <button
-              type="button"
-              onClick={() =>
-                setError("")
-              }
-              className="ml-auto"
+              onClick={() => setError("")}
+              className="text-red-500 transition hover:text-red-700"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
         )}
 
+        {/* Success */}
         {success && (
-          <div className="mt-6 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-semibold text-emerald-700">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-
-            <span>
-              {success}
-            </span>
-
-            <button
-              type="button"
-              onClick={() =>
-                setSuccess("")
-              }
-              className="ml-auto"
-            >
-              <X className="h-4 w-4" />
-            </button>
+          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <CheckCircle2 className="h-5 w-5" />
+            <span>{success}</span>
           </div>
         )}
 
-        {/* =================================================
-            BANK STATUS
-        ================================================= */}
-
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div
-                className={`flex h-11 w-11 items-center justify-center rounded-xl ${
-                  bankComplete
-                    ? "bg-emerald-50 text-emerald-600"
-                    : "bg-amber-50 text-amber-600"
-                }`}
-              >
-                {bankComplete ? (
-                  <CheckCircle2 className="h-5 w-5" />
-                ) : (
-                  <CircleHelp className="h-5 w-5" />
-                )}
+        {/* Exam Hero */}
+        <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 p-6 text-white shadow-xl sm:p-8">
+          <div className="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur">
+                <FileQuestion className="h-4 w-4" />
+                Question Bank
               </div>
 
-              <div>
-                <p className="font-bold text-slate-900">
-                  Question bank progress
-                </p>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                {exam.title}
+              </h1>
 
-                <p className="text-sm text-slate-500">
-                  {questions.length} of{" "}
-                  {exam?.questionCount ||
-                    0} required questions
-                  configured
-                </p>
+              <p className="mt-2 text-sm text-indigo-100 sm:text-base">
+                Build and manage the questions students will receive in this
+                assessment.
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {exam.subject && (
+                  <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium">
+                    {exam.subject}
+                  </span>
+                )}
+
+                <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium">
+                  {getYearLabel(exam.yearOfStudy)}
+                </span>
+
+                <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium">
+                  {getSemesterLabel(exam.semester)}
+                </span>
+
+                <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium">
+                  {exam.duration} min
+                </span>
+
+                <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium">
+                  {exam.published ? "Published" : "Draft"}
+                </span>
               </div>
             </div>
 
-            <div className="min-w-[220px]">
-              <div className="mb-2 flex items-center justify-between text-xs font-bold">
-                <span className="text-slate-500">
-                  Bank readiness
+            <div className="min-w-[220px] rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-indigo-100">
+                  Question Progress
                 </span>
 
-                <span className="text-indigo-600">
-                  {exam
-                    ? Math.min(
-                        100,
-                        Math.round(
-                          (questions.length /
-                            Math.max(
-                              exam.questionCount,
-                              1
-                            )) *
-                            100
-                        )
-                      )
-                    : 0}
-                  %
+                <span className="font-bold text-white">
+                  {questions.length}/{exam.questionCount}
                 </span>
               </div>
 
-              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/20">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 transition-all"
-                  style={{
-                    width: `${
-                      exam
-                        ? Math.min(
-                            100,
-                            (questions.length /
-                              Math.max(
-                                exam.questionCount,
-                                1
-                              )) *
-                              100
-                          )
-                        : 0
-                    }%`,
-                  }}
+                  className="h-full rounded-full bg-white transition-all"
+                  style={{ width: `${progress}%` }}
                 />
+              </div>
+
+              <div className="mt-3 flex items-center justify-between text-xs text-indigo-100">
+                <span>{totalMarks} marks added</span>
+                <span>{Math.round(progress)}%</span>
               </div>
             </div>
           </div>
         </section>
 
-        {/* =================================================
-            QUESTION FORM
-        ================================================= */}
+        {/* Stats */}
+        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            icon={<FileQuestion className="h-5 w-5" />}
+            label="Questions"
+            value={questions.length}
+            description={`Target: ${exam.questionCount}`}
+          />
 
+          <StatCard
+            icon={<BookOpen className="h-5 w-5" />}
+            label="Total Marks"
+            value={totalMarks}
+            description={`Passing: ${exam.passingMarks}`}
+          />
+
+          <StatCard
+            icon={<CheckCircle2 className="h-5 w-5" />}
+            label="Single Correct"
+            value={
+              questions.filter((question) => question.type === "single")
+                .length
+            }
+            description="One correct answer"
+          />
+
+          <StatCard
+            icon={<CircleHelp className="h-5 w-5" />}
+            label="Multi Select"
+            value={
+              questions.filter((question) => question.type === "multi")
+                .length
+            }
+            description="Multiple correct answers"
+          />
+        </section>
+
+        {/* Form */}
         {showForm && (
-          <section className="mt-6 overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-5 sm:px-6">
-              <div className="flex items-center justify-between gap-4">
+          <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
+              <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-                      {editingId ? (
-                        <Edit3 className="h-4 w-4" />
-                      ) : (
-                        <Plus className="h-4 w-4" />
-                      )}
-                    </div>
-
-                    <h3 className="text-lg font-extrabold text-slate-900">
-                      {editingId
-                        ? "Edit Question"
-                        : "Add New Question"}
-                    </h3>
-                  </div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    {editingId ? "Edit Question" : "Add New Question"}
+                  </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Configure the question,
-                    options and correct
-                    answer(s).
+                    Create a question and define the correct answer for
+                    automatic evaluation.
                   </p>
                 </div>
 
-                {editingId && (
-                  <button
-                    type="button"
-                    onClick={
-                      resetForm
-                    }
-                    className="rounded-xl px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                  >
-                    Cancel edit
-                  </button>
-                )}
+                <button
+                  onClick={closeForm}
+                  disabled={saving}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             </div>
 
-            <form
-              onSubmit={
-                saveQuestion
-              }
-              className="space-y-6 p-5 sm:p-6"
-            >
-              {/* Question text */}
-
-              <div>
-                <label className="mb-2 block text-sm font-bold text-slate-700">
-                  Question
-                </label>
-
-                <textarea
-                  value={
-                    form.questionText
-                  }
-                  onChange={(event) =>
-                    setForm(
-                      (current) => ({
-                        ...current,
-
-                        questionText:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
-                  }
-                  rows={4}
-                  placeholder="Enter the question students will see..."
-                  className="w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
-                />
-              </div>
-
-              {/* Type + difficulty + marks */}
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <label className="mb-2 block text-sm font-bold text-slate-700">
-                    Question type
+            <form onSubmit={handleSubmit} className="p-5 sm:p-6">
+              <div className="grid gap-6 lg:grid-cols-3">
+                <div className="lg:col-span-2">
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Question
                   </label>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        changeQuestionType(
-                          "single"
-                        )
-                      }
-                      className={`rounded-xl border px-3 py-3 text-left transition ${
-                        form.type ===
-                        "single"
-                          ? "border-indigo-300 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-100"
-                          : "border-slate-200 text-slate-600 hover:border-slate-300"
-                      }`}
-                    >
-                      <p className="text-sm font-bold">
-                        Single
-                      </p>
-
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        One correct
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        changeQuestionType(
-                          "multi"
-                        )
-                      }
-                      className={`rounded-xl border px-3 py-3 text-left transition ${
-                        form.type ===
-                        "multi"
-                          ? "border-violet-300 bg-violet-50 text-violet-700 ring-2 ring-violet-100"
-                          : "border-slate-200 text-slate-600 hover:border-slate-300"
-                      }`}
-                    >
-                      <p className="text-sm font-bold">
-                        Multi-select
-                      </p>
-
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        Multiple correct
-                      </p>
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-bold text-slate-700">
-                    Difficulty
-                  </label>
-
-                  <div className="relative">
-                    <select
-                      value={
-                        form.difficulty
-                      }
-                      onChange={(event) =>
-                        setForm(
-                          (current) => ({
-                            ...current,
-
-                            difficulty:
-                              event
-                                .target
-                                .value as Difficulty,
-                          })
-                        )
-                      }
-                      className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
-                    >
-                      <option value="easy">
-                        Easy
-                      </option>
-
-                      <option value="medium">
-                        Medium
-                      </option>
-
-                      <option value="hard">
-                        Hard
-                      </option>
-                    </select>
-
-                    <ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-slate-400" />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-bold text-slate-700">
-                    Marks
-                  </label>
-
-                  <input
-                    type="number"
-                    min="0.25"
-                    step="0.25"
-                    value={
-                      form.marks
-                    }
+                  <textarea
+                    value={form.questionText}
                     onChange={(event) =>
-                      setForm(
-                        (current) => ({
-                          ...current,
-
-                          marks:
-                            Number(
-                              event
-                                .target
-                                .value
-                            ),
-                        })
-                      )
+                      setForm((current) => ({
+                        ...current,
+                        questionText: event.target.value,
+                      }))
                     }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
+                    rows={4}
+                    placeholder="Enter your question here..."
+                    className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100"
                   />
+                </div>
+
+                <div className="space-y-5">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Question Type
+                    </label>
+
+                    <div className="relative">
+                      <select
+                        value={form.type}
+                        onChange={(event) =>
+                          changeQuestionType(
+                            event.target.value as QuestionType
+                          )
+                        }
+                        className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+                      >
+                        <option value="single">
+                          Single Correct
+                        </option>
+                        <option value="multi">
+                          Multiple Correct
+                        </option>
+                      </select>
+
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Difficulty
+                    </label>
+
+                    <div className="relative">
+                      <select
+                        value={form.difficulty}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            difficulty: event.target.value as
+                              | "easy"
+                              | "medium"
+                              | "hard",
+                          }))
+                        }
+                        className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+                      >
+                        <option value="easy">Easy</option>
+                        <option value="medium">Medium</option>
+                        <option value="hard">Hard</option>
+                      </select>
+
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Marks
+                    </label>
+
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={form.marks}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          marks: Number(event.target.value),
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* Options */}
-
-              <div>
-                <div className="mb-3 flex items-center justify-between">
+              <div className="mt-7">
+                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <label className="block text-sm font-bold text-slate-700">
-                      Answer options
+                    <label className="block text-sm font-semibold text-slate-700">
+                      Answer Options
                     </label>
 
-                    <p className="mt-1 text-xs text-slate-400">
-                      Click an option to
-                      mark it as correct.
+                    <p className="mt-1 text-xs text-slate-500">
+                      Select the correct answer
+                      {form.type === "multi"
+                        ? "s (multiple allowed)"
+                        : ""}
+                      .
                     </p>
                   </div>
 
-                  <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-600">
-                    {form.correctAnswers.length}{" "}
-                    correct
-                  </span>
+                  {form.options.length < 6 && (
+                    <button
+                      type="button"
+                      onClick={addOption}
+                      className="inline-flex items-center gap-1.5 self-start rounded-lg px-2.5 py-1.5 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50 sm:self-auto"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add Option
+                    </button>
+                  )}
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2">
-                  {form.options.map(
-                    (
-                      option,
-                      index
-                    ) => {
-                      const isCorrect =
-                        form.correctAnswers.includes(
-                          option
-                        ) &&
-                        option.trim() !==
-                          "";
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {form.options.map((option, index) => {
+                    const isCorrect =
+                      option.trim() &&
+                      form.correctAnswers.includes(option.trim());
 
-                      return (
-                        <div
-                          key={
-                            index
+                    return (
+                      <div
+                        key={index}
+                        className={`flex items-center gap-3 rounded-2xl border p-3 transition ${
+                          isCorrect
+                            ? "border-emerald-300 bg-emerald-50"
+                            : "border-slate-200 bg-slate-50"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleCorrectAnswer(option.trim())
                           }
-                          className={`relative rounded-2xl border p-3 transition ${
+                          disabled={!option.trim()}
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition ${
                             isCorrect
-                              ? "border-emerald-300 bg-emerald-50/70 ring-2 ring-emerald-100"
-                              : "border-slate-200 bg-white hover:border-slate-300"
+                              ? "border-emerald-500 bg-emerald-500 text-white"
+                              : "border-slate-300 bg-white text-slate-400 hover:border-indigo-400 hover:text-indigo-500"
                           }`}
+                          title={
+                            isCorrect
+                              ? "Correct answer"
+                              : "Mark as correct"
+                          }
                         >
-                          <div className="flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toggleCorrectAnswer(
-                                  option
-                                )
-                              }
-                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-sm font-black transition ${
-                                isCorrect
-                                  ? "border-emerald-500 bg-emerald-500 text-white"
-                                  : "border-slate-200 bg-slate-50 text-slate-500 hover:border-indigo-300 hover:text-indigo-600"
-                              }`}
-                              aria-label={`Mark option ${
-                                index +
-                                1
-                              } as correct`}
-                            >
-                              {isCorrect ? (
-                                <Check className="h-4 w-4" />
-                              ) : (
-                                String.fromCharCode(
-                                  65 +
-                                    index
-                                )
-                              )}
-                            </button>
-
-                            <input
-                              type="text"
-                              value={
-                                option
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                updateOption(
-                                  index,
-                                  event
-                                    .target
-                                    .value
-                                )
-                              }
-                              placeholder={`Option ${
-                                index +
-                                1
-                              }`}
-                              className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400"
-                            />
-                          </div>
-
-                          {isCorrect && (
-                            <div className="mt-2 ml-12 flex items-center gap-1.5 text-[11px] font-bold text-emerald-600">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-
-                              Correct answer
-                            </div>
+                          {isCorrect ? (
+                            <CheckCircle2 className="h-5 w-5" />
+                          ) : (
+                            <span className="text-xs font-bold">
+                              {String.fromCharCode(65 + index)}
+                            </span>
                           )}
-                        </div>
-                      );
-                    }
-                  )}
+                        </button>
+
+                        <input
+                          value={option}
+                          onChange={(event) =>
+                            updateOption(index, event.target.value)
+                          }
+                          placeholder={`Option ${String.fromCharCode(
+                            65 + index
+                          )}`}
+                          className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                        />
+
+                        {form.options.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => removeOption(index)}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white hover:text-red-500"
+                            title="Remove option"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Explanation */}
-
-              <div>
-                <label className="mb-2 block text-sm font-bold text-slate-700">
-                  Explanation{" "}
-                  <span className="font-medium text-slate-400">
-                    (optional)
+              <div className="mt-7">
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Explanation
+                  <span className="ml-2 font-normal text-slate-400">
+                    Optional
                   </span>
                 </label>
 
                 <textarea
-                  value={
-                    form.explanation
-                  }
+                  value={form.explanation}
                   onChange={(event) =>
-                    setForm(
-                      (current) => ({
-                        ...current,
-
-                        explanation:
-                          event
-                            .target
-                            .value,
-                      })
-                    )
+                    setForm((current) => ({
+                      ...current,
+                      explanation: event.target.value,
+                    }))
                   }
                   rows={3}
-                  placeholder="Add an explanation for the instructor/result review..."
-                  className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-800 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
+                  placeholder="Add an explanation that can help students understand the answer..."
+                  className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100"
                 />
               </div>
 
-              {/* Actions */}
-
-              <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
-                {editingId && (
-                  <button
-                    type="button"
-                    onClick={
-                      resetForm
-                    }
-                    className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
-                  >
-                    Cancel
-                  </button>
-                )}
+              {/* Form Actions */}
+              <div className="mt-7 flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeForm}
+                  disabled={saving}
+                  className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
 
                 <button
                   type="submit"
-                  disabled={
-                    saving
-                  }
-                  className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 px-6 py-3 text-sm font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={saving}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {saving ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1563,413 +1009,264 @@ function QuestionBank() {
                     ? "Saving..."
                     : editingId
                     ? "Update Question"
-                    : "Add Question"}
+                    : "Save Question"}
                 </button>
               </div>
             </form>
           </section>
         )}
 
-        {/* =================================================
-            QUESTIONS TOOLBAR
-        ================================================= */}
-
-        <section className="mt-8">
-          <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        {/* Questions */}
+        <section className="mt-6">
+          <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h3 className="text-xl font-extrabold tracking-tight text-slate-900">
+              <h2 className="text-xl font-bold text-slate-900">
                 Questions
-              </h3>
+              </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Manage the questions
-                available in this exam bank.
+                Manage the questions included in this exam.
               </p>
             </div>
 
             <button
-              type="button"
-              onClick={
-                openCreateForm
-              }
-              className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-slate-800"
+              onClick={openCreateForm}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 lg:hidden"
             >
               <Plus className="h-4 w-4" />
-
               Add Question
             </button>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="grid gap-3 lg:grid-cols-[1fr_180px_180px]">
-              {/* Search */}
+          {/* Filters */}
+          <div className="mb-5 grid gap-3 md:grid-cols-[1fr_180px_180px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
-              <div className="relative">
-                <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search questions or options..."
+                className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+              />
+            </div>
 
-                <input
-                  type="text"
-                  value={
-                    search
-                  }
-                  onChange={(event) =>
-                    setSearch(
-                      event
-                        .target
-                        .value
-                    )
-                  }
-                  placeholder="Search questions..."
-                  className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm font-medium outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
-                />
-              </div>
+            <div className="relative">
+              <select
+                value={difficultyFilter}
+                onChange={(event) =>
+                  setDifficultyFilter(event.target.value)
+                }
+                className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 pr-9 text-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+              >
+                <option value="all">All Difficulty</option>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
 
-              {/* Type */}
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
 
-              <div className="relative">
-                <Filter className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+            <div className="relative">
+              <select
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value)}
+                className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 pr-9 text-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+              >
+                <option value="all">All Types</option>
+                <option value="single">Single Correct</option>
+                <option value="multi">Multiple Correct</option>
+              </select>
 
-                <select
-                  value={
-                    typeFilter
-                  }
-                  onChange={(event) =>
-                    setTypeFilter(
-                      event
-                        .target
-                        .value as
-                        | "all"
-                        | QuestionType
-                    )
-                  }
-                  className="w-full appearance-none rounded-xl border border-slate-200 py-2.5 pl-10 pr-9 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
-                >
-                  <option value="all">
-                    All types
-                  </option>
-
-                  <option value="single">
-                    Single-correct
-                  </option>
-
-                  <option value="multi">
-                    Multi-select
-                  </option>
-                </select>
-
-                <ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-slate-400" />
-              </div>
-
-              {/* Difficulty */}
-
-              <div className="relative">
-                <select
-                  value={
-                    difficultyFilter
-                  }
-                  onChange={(event) =>
-                    setDifficultyFilter(
-                      event
-                        .target
-                        .value as
-                        | "all"
-                        | Difficulty
-                    )
-                  }
-                  className="w-full appearance-none rounded-xl border border-slate-200 px-4 py-2.5 pr-9 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
-                >
-                  <option value="all">
-                    All difficulty
-                  </option>
-
-                  <option value="easy">
-                    Easy
-                  </option>
-
-                  <option value="medium">
-                    Medium
-                  </option>
-
-                  <option value="hard">
-                    Hard
-                  </option>
-                </select>
-
-                <ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-slate-400" />
-              </div>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             </div>
           </div>
-        </section>
 
-        {/* =================================================
-            QUESTION LIST
-        ================================================= */}
-
-        <section className="mt-5 space-y-4">
-          {filteredQuestions.length ===
-          0 ? (
-            <div className="rounded-[24px] border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-                <FileQuestion className="h-7 w-7" />
+          {filteredQuestions.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50">
+                <FileQuestion className="h-7 w-7 text-indigo-600" />
               </div>
 
-              <h3 className="mt-4 text-lg font-extrabold text-slate-900">
-                {questions.length ===
-                0
-                  ? "Your question bank is empty"
-                  : "No questions found"}
+              <h3 className="mt-5 text-lg font-bold text-slate-900">
+                {questions.length === 0
+                  ? "No questions yet"
+                  : "No matching questions"}
               </h3>
 
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                {questions.length ===
-                0
-                  ? "Start adding questions so ExamForge can build randomized student attempts from this bank."
-                  : "Try changing your search or filters."}
+                {questions.length === 0
+                  ? "Start building your question bank by adding the first question to this exam."
+                  : "Try changing your search or filters to find the questions you are looking for."}
               </p>
 
-              {questions.length ===
-                0 && (
+              {questions.length === 0 && (
                 <button
-                  type="button"
-                  onClick={
-                    openCreateForm
-                  }
-                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700"
+                  onClick={openCreateForm}
+                  className="mt-6 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700"
                 >
                   <Plus className="h-4 w-4" />
-
                   Add First Question
                 </button>
               )}
             </div>
           ) : (
-            filteredQuestions.map(
-              (
-                question,
-                index
-              ) => {
-                const questionNumber =
-                  question.order ||
-                  index + 1;
-
-                return (
-                  <article
-                    key={
-                      question._id
-                    }
-                    className="group rounded-[22px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-200 hover:shadow-md sm:p-6"
-                  >
-                    <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-                      {/* Number */}
-
-                      <div className="flex shrink-0 items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-sm font-black text-indigo-600">
-                          {questionNumber}
+            <div className="space-y-4">
+              {filteredQuestions.map((question, index) => (
+                <article
+                  key={question._id}
+                  className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
+                >
+                  <div className="p-5 sm:p-6">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex min-w-0 gap-4">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-sm font-bold text-indigo-600">
+                          {question.order || index + 1}
                         </div>
 
-                        <div className="lg:hidden">
-                          <QuestionBadges
-                            question={
-                              question
-                            }
-                          />
-                        </div>
-                      </div>
+                        <div className="min-w-0">
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                                question.type === "multi"
+                                  ? "bg-violet-100 text-violet-700"
+                                  : "bg-indigo-100 text-indigo-700"
+                              }`}
+                            >
+                              {question.type === "multi"
+                                ? "Multiple Correct"
+                                : "Single Correct"}
+                            </span>
 
-                      {/* Content */}
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold capitalize text-slate-600">
+                              {question.difficulty || "medium"}
+                            </span>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="hidden lg:block">
-                          <QuestionBadges
-                            question={
-                              question
-                            }
-                          />
-                        </div>
-
-                        <h4 className="mt-2 text-base font-extrabold leading-7 text-slate-900 sm:text-lg">
-                          {
-                            question.questionText
-                          }
-                        </h4>
-
-                        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                          {question.options.map(
-                            (
-                              option,
-                              optionIndex
-                            ) => {
-                              const correct =
-                                question.correctAnswers.includes(
-                                  option
-                                );
-
-                              return (
-                                <div
-                                  key={
-                                    optionIndex
-                                  }
-                                  className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm ${
-                                    correct
-                                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                      : "border-slate-100 bg-slate-50 text-slate-600"
-                                  }`}
-                                >
-                                  <span
-                                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-black ${
-                                      correct
-                                        ? "bg-emerald-500 text-white"
-                                        : "bg-white text-slate-400 shadow-sm"
-                                    }`}
-                                  >
-                                    {correct ? (
-                                      <Check className="h-3.5 w-3.5" />
-                                    ) : (
-                                      String.fromCharCode(
-                                        65 +
-                                          optionIndex
-                                      )
-                                    )}
-                                  </span>
-
-                                  <span className="font-semibold">
-                                    {
-                                      option
-                                    }
-                                  </span>
-                                </div>
-                              );
-                            }
-                          )}
-                        </div>
-
-                        {question.explanation && (
-                          <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3">
-                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                              Explanation
-                            </p>
-
-                            <p className="mt-1 text-sm leading-6 text-slate-600">
-                              {
-                                question.explanation
-                              }
-                            </p>
+                            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                              {question.marks}{" "}
+                              {question.marks === 1 ? "mark" : "marks"}
+                            </span>
                           </div>
-                        )}
+
+                          <h3 className="text-base font-bold leading-6 text-slate-900 sm:text-lg">
+                            {question.questionText}
+                          </h3>
+                        </div>
                       </div>
 
-                      {/* Actions */}
-
-                      <div className="flex shrink-0 items-center gap-2 border-t border-slate-100 pt-4 lg:border-0 lg:pt-0">
+                      <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
                         <button
-                          type="button"
-                          onClick={() =>
-                            editQuestion(
-                              question
-                            )
-                          }
-                          className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+                          onClick={() => openEditForm(question)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                         >
-                          <Edit3 className="h-4 w-4" />
-
-                          <span className="hidden sm:inline">
-                            Edit
-                          </span>
+                          <Edit3 className="h-3.5 w-3.5" />
+                          Edit
                         </button>
 
                         <button
-                          type="button"
-                          disabled={
-                            deletingId ===
-                            question._id
-                          }
-                          onClick={() =>
-                            void deleteQuestion(
-                              question._id
-                            )
-                          }
-                          className="flex items-center gap-2 rounded-xl border border-red-100 px-3 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-50 disabled:opacity-50"
+                          onClick={() => handleDelete(question._id)}
+                          disabled={deletingId === question._id}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {deletingId ===
-                          question._id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                          {deletingId === question._id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           )}
-
-                          <span className="hidden sm:inline">
-                            Delete
-                          </span>
+                          Delete
                         </button>
                       </div>
                     </div>
-                  </article>
-                );
-              }
-            )
+
+                    <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                      {question.options.map((option, optionIndex) => {
+                        const isCorrect =
+                          question.correctAnswers.includes(option);
+
+                        return (
+                          <div
+                            key={optionIndex}
+                            className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-sm ${
+                              isCorrect
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-slate-100 bg-slate-50 text-slate-700"
+                            }`}
+                          >
+                            <span
+                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
+                                isCorrect
+                                  ? "bg-emerald-500 text-white"
+                                  : "bg-white text-slate-500 ring-1 ring-slate-200"
+                              }`}
+                            >
+                              {String.fromCharCode(65 + optionIndex)}
+                            </span>
+
+                            <span className="min-w-0 flex-1">
+                              {option}
+                            </span>
+
+                            {isCorrect && (
+                              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {question.explanation && (
+                      <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                          Explanation
+                        </p>
+
+                        <p className="mt-1 text-sm leading-6 text-blue-900">
+                          {question.explanation}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
           )}
         </section>
       </main>
-
-      {/* ==================================================
-          FOOTER
-      ================================================== */}
-
-      <footer className="mt-12 border-t border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-6 text-center text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:text-left lg:px-8">
-          <p>
-            © 2026 ExamForge · Instructor
-            Portal
-          </p>
-
-          <p className="font-medium">
-            Build fair exams. Measure real
-            knowledge.
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }
 
-// ======================================================
-// QUESTION BADGES
-// ======================================================
+interface StatCardProps {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  description: string;
+}
 
-function QuestionBadges({
-  question,
-}: {
-  question: Question;
-}) {
+function StatCard({
+  icon,
+  label,
+  value,
+  description,
+}: StatCardProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span
-        className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${
-          question.type ===
-          "single"
-            ? "bg-indigo-50 text-indigo-600"
-            : "bg-violet-50 text-violet-600"
-        }`}
-      >
-        {question.type ===
-        "single"
-          ? "Single-correct"
-          : "Multi-select"}
-      </span>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-slate-500">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">
+            {value}
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            {description}
+          </p>
+        </div>
 
-      {question.difficulty && (
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold capitalize text-slate-500">
-          {question.difficulty}
-        </span>
-      )}
-
-      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-600">
-        {question.marks}{" "}
-        {question.marks ===
-        1
-          ? "mark"
-          : "marks"}
-      </span>
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+          {icon}
+        </div>
+      </div>
     </div>
   );
 }
