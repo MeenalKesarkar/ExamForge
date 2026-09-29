@@ -1,151 +1,249 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, {
+  Document,
+  Schema,
+} from "mongoose";
 
-export interface IExam extends Document {
+// ======================================================
+// EXAM INTERFACE
+// ======================================================
+
+export interface IExam
+  extends Document {
   title: string;
-  description: string;
+
+  // Academic assignment
+  subject: string;
+  degree: string;
+  yearOfStudy: number;
+  semester: number;
+
+  // Exam configuration
   duration: number;
   questionCount: number;
   totalMarks: number;
   passingMarks: number;
+
+  // Negative marking
   negativeMarking: boolean;
   negativePenalty: number;
-  published: boolean;
-  createdBy: mongoose.Types.ObjectId;
-  category: string;
+
+  // Instructions
   instructions: string[];
+
+  // Publishing
+  published: boolean;
+
+  // Attempts
+  allowedAttempts: number;
+
+  // Optional scheduling
+  startDate?: Date | null;
+  endDate?: Date | null;
+
+  // Question behavior
   shuffleQuestions: boolean;
   shuffleOptions: boolean;
-  allowedAttempts: number;
-  startDate: Date | null;
-  endDate: Date | null;
+
+  // Instructor
+  createdBy: mongoose.Types.ObjectId;
+
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const examSchema = new Schema<IExam>(
-  {
-    title: {
-      type: String,
-      required: [true, "Exam title is required"],
-      trim: true,
-    },
+// ======================================================
+// EXAM SCHEMA
+// ======================================================
 
-    description: {
-      type: String,
-      trim: true,
-      default: "",
-    },
+const examSchema =
+  new Schema<IExam>(
+    {
+      // --------------------------------------------------
+      // BASIC INFORMATION
+      // --------------------------------------------------
 
-    duration: {
-      type: Number,
-      required: [
-        true,
-        "Exam duration (in minutes) is required",
-      ],
-      min: [1, "Duration must be at least 1 minute"],
-    },
+      title: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 200,
+      },
 
-    questionCount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+      subject: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 150,
+      },
 
-    totalMarks: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+      // --------------------------------------------------
+      // ACADEMIC INFORMATION
+      // --------------------------------------------------
 
-    passingMarks: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+      degree: {
+        type: String,
+        required: true,
+        default: "BCA",
+        trim: true,
+        uppercase: true,
+      },
 
-    negativeMarking: {
-      type: Boolean,
-      default: false,
-    },
+      yearOfStudy: {
+        type: Number,
+        required: true,
+        min: 1,
+        max: 3,
+      },
 
-    negativePenalty: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+      semester: {
+        type: Number,
+        required: true,
+        min: 1,
+        max: 6,
+      },
 
-    published: {
-      type: Boolean,
-      default: false,
-    },
+      // --------------------------------------------------
+      // EXAM CONFIGURATION
+      // --------------------------------------------------
 
-    createdBy: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: [
-        true,
-        "Exam creator (instructor) is required",
-      ],
-    },
+      duration: {
+        type: Number,
+        required: true,
+        min: 1,
+      },
 
-    category: {
-      type: String,
-      trim: true,
-      default: "General",
-    },
+      questionCount: {
+        type: Number,
+        required: true,
+        min: 1,
+      },
 
-    instructions: {
-      type: [String],
-      default: [
-        "Read each question carefully before answering.",
-        "Do not switch tabs or minimize the window during the exam.",
-        "Ensure stable internet connectivity throughout the test.",
-      ],
-    },
+      totalMarks: {
+        type: Number,
+        required: true,
+        min: 1,
+      },
 
-    shuffleQuestions: {
-      type: Boolean,
-      default: false,
-    },
+      passingMarks: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
 
-    shuffleOptions: {
-      type: Boolean,
-      default: false,
-    },
+      // --------------------------------------------------
+      // NEGATIVE MARKING
+      // --------------------------------------------------
 
-    allowedAttempts: {
-      type: Number,
-      default: 1,
-      min: 1,
-    },
+      negativeMarking: {
+        type: Boolean,
+        default: false,
+      },
 
-    startDate: {
-      type: Date,
-      default: null,
-    },
+      negativePenalty: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
 
-    endDate: {
-      type: Date,
-      default: null,
+      // --------------------------------------------------
+      // INSTRUCTIONS
+      // --------------------------------------------------
+
+      instructions: {
+        type: [String],
+        default: [],
+      },
+
+      // --------------------------------------------------
+      // PUBLISHING
+      // --------------------------------------------------
+
+      published: {
+        type: Boolean,
+        default: false,
+        index: true,
+      },
+
+      // --------------------------------------------------
+      // ATTEMPTS
+      // --------------------------------------------------
+
+      allowedAttempts: {
+        type: Number,
+        default: 2,
+        min: 1,
+        max: 3,
+      },
+
+      // --------------------------------------------------
+      // OPTIONAL EXAM SCHEDULE
+      // --------------------------------------------------
+
+      startDate: {
+        type: Date,
+        default: null,
+      },
+
+      endDate: {
+        type: Date,
+        default: null,
+      },
+
+      // --------------------------------------------------
+      // QUESTION RANDOMIZATION
+      // --------------------------------------------------
+
+      shuffleQuestions: {
+        type: Boolean,
+        default: false,
+      },
+
+      shuffleOptions: {
+        type: Boolean,
+        default: false,
+      },
+
+      // --------------------------------------------------
+      // INSTRUCTOR
+      // --------------------------------------------------
+
+      createdBy: {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+        index: true,
+      },
     },
-  },
-  {
-    collection: "exams",
-    timestamps: true,
-  }
-);
+    {
+      collection: "exams",
+      timestamps: true,
+    }
+  );
+
+// ======================================================
+// INDEXES
+// ======================================================
+
+examSchema.index({
+  published: 1,
+  degree: 1,
+  yearOfStudy: 1,
+  semester: 1,
+});
 
 examSchema.index({
   createdBy: 1,
-  published: 1,
+  createdAt: -1,
 });
 
-examSchema.index({
-  published: 1,
-  category: 1,
-});
+// ======================================================
+// MODEL
+// ======================================================
 
-const Exam = mongoose.model<IExam>(
-  "Exam",
-  examSchema
-);
+const Exam =
+  mongoose.model<IExam>(
+    "Exam",
+    examSchema
+  );
 
 export default Exam;
