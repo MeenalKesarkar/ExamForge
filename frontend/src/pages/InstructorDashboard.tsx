@@ -592,6 +592,16 @@ function InstructorDashboard() {
 
           <div className="hidden items-center gap-3 md:flex">
 
+            <button
+              type="button"
+              onClick={() =>
+                navigate("/instructor/profile")
+              }
+              className="flex items-center gap-3 rounded-xl p-1.5 text-left transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              title="Open instructor profile"
+              aria-label="Open instructor profile"
+            >
+
             <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-indigo-100 to-violet-100 text-sm font-black text-indigo-700">
               {user?.profilePicture ? (
                 <img
@@ -621,6 +631,8 @@ function InstructorDashboard() {
                 Instructor
               </p>
             </div>
+
+            </button>
 
             <button
               type="button"

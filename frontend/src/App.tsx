@@ -5,6 +5,7 @@ import Register from "./pages/Register";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentProfile from "./pages/StudentProfile";
 import InstructorDashboard from "./pages/InstructorDashboard";
+import InstructorProfile from "./pages/InstructorProfile";
 import ExamPage from "./pages/ExamPage";
 import CreateExam from "./pages/CreateExam";
 import EditExam from "./pages/EditExam";
@@ -48,6 +49,12 @@ function App() {
         <Route
           path="/instructor"
           element={<InstructorDashboard />}
+        />
+
+        {/* Instructor Profile */}
+        <Route
+          path="/instructor/profile"
+          element={<InstructorProfile />}
         />
 
         {/* Create New Exam */}

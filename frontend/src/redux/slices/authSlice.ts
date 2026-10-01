@@ -10,6 +10,14 @@ export type UserRole =
   | "student"
   | "instructor";
 
+export interface TeachingAssignment {
+  subject: string;
+  degree: string;
+  yearOfStudy: number;
+  semesters: number[];
+  classSections: string[];
+}
+
 export interface User {
   id: string;
 
@@ -22,12 +30,16 @@ export interface User {
   yearOfStudy?: number;
   semester?: number;
   studentId?: string;
+  classSection?: string;
+
+  institution?: string;
+  teachingAssignments?: TeachingAssignment[];
 
   phone?: string;
   city?: string;
   bio?: string;
 
-  profilePicture?: string;
+  profilePicture?: string | null;
 }
 
 interface AuthState {
