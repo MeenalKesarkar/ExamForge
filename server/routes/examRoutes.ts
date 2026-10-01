@@ -145,7 +145,42 @@ router.get(
           createdAt: -1,
         });
 
-      return res.status(200).json(exams);
+      const now = new Date();
+
+      const examsWithStatus =
+        exams.map((exam: any) => {
+          let availabilityStatus =
+            "ACTIVE";
+
+          if (
+            exam.startDate &&
+            now <
+              new Date(
+                exam.startDate
+              )
+          ) {
+            availabilityStatus =
+              "UPCOMING";
+          } else if (
+            exam.endDate &&
+            now >=
+              new Date(
+                exam.endDate
+              )
+          ) {
+            availabilityStatus =
+              "EXPIRED";
+          }
+
+          return {
+            ...exam.toObject(),
+            availabilityStatus,
+          };
+        });
+
+      return res.status(200).json(
+        examsWithStatus
+      );
     } catch (error) {
       console.error(
         "Error fetching published exams:",
@@ -537,6 +572,17 @@ router.post(
               "Invalid end date",
           });
         }
+      }
+
+      if (
+        Boolean(published) &&
+        (!parsedStartDate ||
+          !parsedEndDate)
+      ) {
+        return res.status(400).json({
+          message:
+            "Published exams require a start date and deadline",
+        });
       }
 
       if (
@@ -1141,6 +1187,17 @@ router.put(
           Boolean(published);
       }
 
+      if (
+        exam.published &&
+        (!exam.startDate ||
+          !exam.endDate)
+      ) {
+        return res.status(400).json({
+          message:
+            "Published exams require a start date and deadline",
+        });
+      }
+
       await exam.save();
 
       return res.status(200).json({
@@ -1405,14 +1462,14 @@ router.post(
 
       if (
         exam.endDate &&
-        now >
+        now >=
           new Date(
             exam.endDate
           )
       ) {
         return res.status(403).json({
           message:
-            "This exam has ended",
+            "This exam has expired",
         });
       }
 
@@ -1559,6 +1616,12 @@ router.post(
 
             instructions:
               exam.instructions,
+
+            startDate:
+              exam.startDate,
+
+            endDate:
+              exam.endDate,
           },
         });
       }
@@ -1707,7 +1770,7 @@ router.post(
       const startTime =
         new Date();
 
-      const endTime =
+      const durationEndTime =
         new Date(
           startTime.getTime() +
             Number(
@@ -1716,6 +1779,18 @@ router.post(
               60 *
               1000
         );
+
+      const endTime =
+        exam.endDate
+          ? new Date(
+              Math.min(
+                durationEndTime.getTime(),
+                new Date(
+                  exam.endDate
+                ).getTime()
+              )
+            )
+          : durationEndTime;
 
       /* -----------------------------------------
          CREATE ATTEMPT

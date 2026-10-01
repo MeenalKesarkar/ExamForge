@@ -77,7 +77,8 @@ interface AttemptResponse {
   questions: ExamQuestion[];
   serverNow: string;
   remainingSeconds?: number;
-  result?: ExamResult;
+  resultsAvailable?: boolean;
+  result?: ExamResult | null;
 }
 
 interface ExamResult {
@@ -90,7 +91,7 @@ interface ExamResult {
   incorrectCount: number;
   unansweredCount: number;
   answeredCount: number;
-  questionResults: Array<{
+  questionResults?: Array<{
     questionId: string;
     answered: boolean;
     correct: boolean;
@@ -172,6 +173,47 @@ const getErrorMessage = (
   return fallback;
 };
 
+const normalizeResult = (
+  rawResult: Partial<ExamResult>,
+  examData: ExamData,
+  answerData: Record<string, string[]>,
+  questionCount: number
+): ExamResult => {
+  const answeredCount =
+    rawResult.answeredCount ??
+    Object.values(answerData).filter(
+      (answer) =>
+        Array.isArray(answer) &&
+        answer.length > 0
+    ).length;
+
+  return {
+    score: rawResult.score ?? 0,
+    totalMarks:
+      rawResult.totalMarks ??
+      examData.totalMarks,
+    percentage:
+      rawResult.percentage ?? 0,
+    passed: rawResult.passed ?? false,
+    passingMarks:
+      rawResult.passingMarks ??
+      examData.passingMarks,
+    correctCount:
+      rawResult.correctCount ?? 0,
+    incorrectCount:
+      rawResult.incorrectCount ?? 0,
+    unansweredCount:
+      rawResult.unansweredCount ??
+      Math.max(
+        0,
+        questionCount - answeredCount
+      ),
+    answeredCount,
+    questionResults:
+      rawResult.questionResults,
+  };
+};
+
 /* =========================================================
    COMPONENT
 ========================================================= */
@@ -248,6 +290,11 @@ function ExamPage() {
     useState<ExamResult | null>(
       null
     );
+
+  const [
+    ,
+    setResultsAvailable,
+  ] = useState(false);
 
   const [
     submittedStatus,
@@ -364,6 +411,13 @@ function ExamPage() {
               .attempt.answers || {}
           );
 
+          setResultsAvailable(
+            Boolean(
+              attemptResponse
+                .resultsAvailable
+            )
+          );
+
           /*
            * Calculate server/browser
            * clock difference.
@@ -429,11 +483,19 @@ function ExamPage() {
             );
 
             if (
+              attemptResponse.resultsAvailable &&
               attemptResponse.result
             ) {
               setResult(
-                attemptResponse.result
+                normalizeResult(
+                  attemptResponse.result,
+                  attemptResponse.exam,
+                  attemptResponse.attempt.answers || {},
+                  attemptResponse.questions.length
+                )
               );
+            } else {
+              setResult(null);
             }
           }
         } catch (err) {
@@ -457,6 +519,90 @@ function ExamPage() {
   useEffect(() => {
     void loadAttempt();
   }, [loadAttempt]);
+
+  /* =======================================================
+     WAIT FOR RESULTS
+     Results become available only after the exam deadline.
+  ======================================================= */
+
+  useEffect(() => {
+    if (
+      !attemptId ||
+      !submittedStatus ||
+      result
+    ) {
+      return;
+    }
+
+    const checkForPublishedResult =
+      async () => {
+        try {
+          const response =
+            await fetch(
+              `${API_URL}/attempts/${attemptId}`,
+              {
+                method: "GET",
+                credentials:
+                  "include",
+              }
+            );
+
+          if (!response.ok) {
+            return;
+          }
+
+          const data =
+            (await response.json()) as AttemptResponse;
+
+          setResultsAvailable(
+            Boolean(
+              data.resultsAvailable
+            )
+          );
+
+          if (
+            data.resultsAvailable &&
+            data.result
+          ) {
+            setResult(
+              normalizeResult(
+                data.result,
+                data.exam,
+                data.attempt.answers || {},
+                data.questions.length
+              )
+            );
+
+            setAttempt(
+              data.attempt
+            );
+          }
+        } catch (err) {
+          console.error(
+            "Result availability check error:",
+            err
+          );
+        }
+      };
+
+    const interval =
+      window.setInterval(
+        checkForPublishedResult,
+        5000
+      );
+
+    void checkForPublishedResult();
+
+    return () => {
+      window.clearInterval(
+        interval
+      );
+    };
+  }, [
+    attemptId,
+    submittedStatus,
+    result,
+  ]);
 
   /* =======================================================
      TIMER
@@ -748,8 +894,22 @@ function ExamPage() {
         );
       }
 
+      setResultsAvailable(
+        Boolean(
+          data.resultsAvailable
+        )
+      );
+
       setResult(
-        data.result
+        data.resultsAvailable &&
+          data.result
+          ? normalizeResult(
+              data.result,
+              exam!,
+              answers,
+              questions.length
+            )
+          : null
       );
 
       setSubmittedStatus(
@@ -950,6 +1110,63 @@ function ExamPage() {
           <p className="mt-4 text-sm text-white/50">
             Loading your exam...
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  /* =======================================================
+     RESULTS PENDING POPUP
+  ======================================================= */
+
+  if (
+    submittedStatus
+  ) {
+    return (
+      <div className="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+        <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-slate-900 text-white shadow-2xl">
+          <div className="border-b border-white/10 bg-gradient-to-r from-indigo-500/20 via-purple-500/10 to-transparent px-6 py-8 text-center">
+            <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-400" />
+
+            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-300">
+              Exam Submitted
+            </p>
+
+            <h1 className="mt-2 text-2xl font-bold">
+              Your exam has been submitted
+            </h1>
+          </div>
+
+          <div className="px-6 py-7 text-center">
+            <p className="text-sm leading-6 text-white/60">
+              {submittedStatus === "TIMED_OUT"
+                ? "Your exam time has ended and your answers have been submitted automatically."
+                : "Your answers have been submitted successfully."}
+            </p>
+
+            <div className="mt-5 rounded-2xl border border-indigo-400/20 bg-indigo-500/10 px-5 py-4">
+              <p className="text-sm font-semibold text-indigo-200">
+                Results will be announced soon.
+              </p>
+              <p className="mt-1 text-xs leading-5 text-white/45">
+                Your score will be displayed after the exam deadline.
+              </p>
+            </div>
+
+            <p className="mt-4 text-xs text-white/35">
+              This page will automatically check for your result.
+            </p>
+
+            <button
+              type="button"
+              onClick={() =>
+                navigate("/student")
+              }
+              className="mt-6 w-full rounded-2xl bg-indigo-500 px-6 py-3.5 font-semibold text-white transition hover:bg-indigo-400"
+            >
+              Back to Dashboard
+            </button>
+          </div>
         </div>
       </div>
     );

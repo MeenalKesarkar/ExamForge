@@ -643,6 +643,22 @@ function EditExam() {
       return;
     }
 
+    if (published && !startDate) {
+      setError(
+        "Please select the exam start date and time before publishing."
+      );
+
+      return;
+    }
+
+    if (published && !endDate) {
+      setError(
+        "Please select the exam deadline before publishing."
+      );
+
+      return;
+    }
+
     if (
       startDate &&
       endDate &&

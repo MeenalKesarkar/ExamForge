@@ -32,7 +32,18 @@ interface Exam {
 interface Attempt {
   _id: string;
 
-  studentId:
+  student?:
+    | string
+    | {
+        _id: string;
+        name: string;
+        email: string;
+        studentId?: string;
+        yearOfStudy?: number;
+        semester?: number;
+      };
+
+  studentId?:
     | string
     | {
         _id: string;
@@ -68,22 +79,30 @@ interface AttemptListResponse {
 }
 
 function getStudentName(attempt: Attempt): string {
+  const student =
+    attempt.student ??
+    attempt.studentId;
+
   if (
-    typeof attempt.studentId === "object" &&
-    attempt.studentId
+    typeof student === "object" &&
+    student
   ) {
-    return attempt.studentId.name;
+    return student.name;
   }
 
   return "Student";
 }
 
 function getStudentEmail(attempt: Attempt): string {
+  const student =
+    attempt.student ??
+    attempt.studentId;
+
   if (
-    typeof attempt.studentId === "object" &&
-    attempt.studentId
+    typeof student === "object" &&
+    student
   ) {
-    return attempt.studentId.email;
+    return student.email;
   }
 
   return "";

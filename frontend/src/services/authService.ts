@@ -11,30 +11,51 @@ const API_URL = (
 // TYPES
 // ======================================================
 
+export interface TeachingAssignment {
+  subject: string;
+  degree: string;
+  yearOfStudy: number;
+  semesters: number[];
+  classSections: string[];
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
   rememberMe?: boolean;
 }
 
-export interface AuthUser {
-  id: string;
+export interface RegisterRequest {
   name: string;
   email: string;
-
-  role:
-    | "student"
-    | "instructor";
-
+  password: string;
+  role: "student" | "instructor";
   degree?: string;
   yearOfStudy?: number;
   semester?: number;
   studentId?: string;
+  classSection?: string;
+  institution?: string;
+  teachingAssignments?: TeachingAssignment[];
+  phone?: string;
+  city?: string;
+}
 
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: "student" | "instructor";
+  degree?: string;
+  yearOfStudy?: number;
+  semester?: number;
+  studentId?: string;
+  classSection?: string;
+  institution?: string;
+  teachingAssignments?: TeachingAssignment[];
   phone?: string;
   city?: string;
   bio?: string;
-
   profilePicture?: string;
 }
 
@@ -42,6 +63,11 @@ export interface LoginResponse {
   message: string;
   user: AuthUser;
   rememberMe?: boolean;
+}
+
+export interface RegisterResponse {
+  message: string;
+  user: AuthUser;
 }
 
 export interface RefreshResponse {
@@ -124,17 +150,13 @@ export const loginUser =
           `${API_URL}/auth/login`,
           {
             method: "POST",
-
             credentials: "include",
-
             headers: {
               "Content-Type":
                 "application/json",
-
               Accept:
                 "application/json",
             },
-
             body: JSON.stringify({
               email,
               password:
@@ -180,6 +202,63 @@ export const loginUser =
   };
 
 // ======================================================
+// REGISTER
+// ======================================================
+
+export const registerUser =
+  async (
+    data: RegisterRequest
+  ): Promise<RegisterResponse> => {
+    try {
+      const response =
+        await fetch(
+          `${API_URL}/auth/register`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Accept:
+                "application/json",
+            },
+            body: JSON.stringify({
+              ...data,
+              name: data.name.trim(),
+              email: data.email.trim().toLowerCase(),
+            }),
+          }
+        );
+
+      const result =
+        await parseResponse(response);
+
+      if (!response.ok) {
+        throw new Error(
+          result?.message ||
+            "Unable to complete registration."
+        );
+      }
+
+      if (!result?.user) {
+        throw new Error(
+          "Registration response did not contain user information."
+        );
+      }
+
+      return result as RegisterResponse;
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new Error(
+          "Unable to connect to ExamForge. Make sure the backend is running on port 5000."
+        );
+      }
+
+      throw error;
+    }
+  };
+
+// ======================================================
 // REFRESH
 // ======================================================
 
@@ -191,7 +270,6 @@ export const refreshSession =
         {
           method: "POST",
           credentials: "include",
-
           headers: {
             Accept:
               "application/json",
@@ -226,7 +304,6 @@ export const logoutUser =
         {
           method: "POST",
           credentials: "include",
-
           headers: {
             Accept:
               "application/json",
@@ -251,17 +328,13 @@ export const sendForgotPasswordOTP =
         `${API_URL}/auth/forgot-password/send-otp`,
         {
           method: "POST",
-
           credentials: "include",
-
           headers: {
             "Content-Type":
               "application/json",
-
             Accept:
               "application/json",
           },
-
           body: JSON.stringify({
             email:
               email
@@ -300,23 +373,18 @@ export const verifyForgotPasswordOTP =
         `${API_URL}/auth/forgot-password/verify-otp`,
         {
           method: "POST",
-
           credentials: "include",
-
           headers: {
             "Content-Type":
               "application/json",
-
             Accept:
               "application/json",
           },
-
           body: JSON.stringify({
             email:
               email
                 .trim()
                 .toLowerCase(),
-
             otp:
               otp.trim(),
           }),
@@ -359,25 +427,19 @@ export const resetPassword =
         `${API_URL}/auth/forgot-password/reset`,
         {
           method: "POST",
-
           credentials: "include",
-
           headers: {
             "Content-Type":
               "application/json",
-
             Accept:
               "application/json",
           },
-
           body: JSON.stringify({
             email:
               email
                 .trim()
                 .toLowerCase(),
-
             resetToken,
-
             newPassword,
           }),
         }

@@ -370,8 +370,17 @@ function QuestionBank() {
         explanation: form.explanation.trim(),
         difficulty: form.difficulty,
         order: editingId
-          ? questions.find((question) => question._id === editingId)?.order
-          : questions.length + 1,
+          ? questions.find(
+              (question) => question._id === editingId
+            )?.order
+          : questions.length > 0
+            ? Math.max(
+                ...questions.map(
+                  (question) =>
+                    Number(question.order) || 0
+                )
+              ) + 1
+            : 1,
       };
 
       const response = await fetch(

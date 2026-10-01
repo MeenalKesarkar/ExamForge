@@ -17,8 +17,10 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
+
+import { useAppDispatch } from "../redux/hooks";
+import { login } from "../redux/slices/authSlice";
 
 import {
   loginUser,
@@ -33,7 +35,7 @@ export default function Login() {
     useNavigate();
 
   const dispatch =
-    useDispatch();
+    useAppDispatch();
 
   // ====================================================
   // FORM STATE
@@ -151,14 +153,11 @@ export default function Login() {
       //
       // ------------------------------------------------
 
-      dispatch({
-        type: "auth/login",
-
-        payload: {
-          user:
-            result.user,
-        },
-      });
+      dispatch(
+        login({
+          user: result.user,
+        })
+      );
 
       // ------------------------------------------------
       // REDIRECT BASED ON ROLE
@@ -1335,11 +1334,32 @@ export default function Login() {
                             text-slate-500
                           "
                         >
-                          Student accounts are
-                          created and approved by
-                          your instructor or campus
-                          administrator.
+                          New to ExamForge? Create your
+                          student or instructor account
+                          to get started.
                         </p>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate("/register")
+                          }
+                          className="
+                            mt-3
+                            inline-flex
+                            items-center
+                            gap-2
+                            text-sm
+                            font-semibold
+                            text-[#5138ff]
+                            transition
+                            hover:text-[#8b16f5]
+                            hover:underline
+                          "
+                        >
+                          Create an account
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
 
                       </div>
 

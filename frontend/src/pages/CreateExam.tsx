@@ -9,7 +9,6 @@ import {
   FileText,
   GraduationCap,
   Info,
-  Minus,
   Save,
   ShieldCheck,
   Sparkles,
@@ -40,6 +39,8 @@ interface ExamForm {
   allowedAttempts: string;
   negativeMarking: boolean;
   negativePenalty: string;
+  startDate: string;
+  endDate: string;
   instructions: string;
 }
 
@@ -60,6 +61,8 @@ const initialForm: ExamForm = {
   allowedAttempts: "2",
   negativeMarking: false,
   negativePenalty: "0.25",
+  startDate: "",
+  endDate: "",
   instructions:
     "Read each question carefully before answering. Your answers will be saved automatically during the examination.",
 };
@@ -253,6 +256,35 @@ function CreateExam() {
     }
 
     // --------------------------------------------------
+    // AVAILABILITY VALIDATION
+    // --------------------------------------------------
+
+    if (publish && !form.startDate) {
+      setError(
+        "Please select the exam start date and time before publishing."
+      );
+      return;
+    }
+
+    if (publish && !form.endDate) {
+      setError(
+        "Please select the exam deadline before publishing."
+      );
+      return;
+    }
+
+    if (
+      form.startDate &&
+      form.endDate &&
+      new Date(form.startDate) >= new Date(form.endDate)
+    ) {
+      setError(
+        "End date must be later than start date."
+      );
+      return;
+    }
+
+    // --------------------------------------------------
     // Prepare payload
     // --------------------------------------------------
 
@@ -295,8 +327,21 @@ function CreateExam() {
             )
           : 0,
 
-      instructions:
+      startDate: form.startDate
+        ? new Date(form.startDate).toISOString()
+        : null,
+
+      endDate: form.endDate
+        ? new Date(form.endDate).toISOString()
+        : null,
+
+      instructions: [
         form.instructions.trim(),
+      ].filter(Boolean),
+
+      shuffleQuestions: false,
+
+      shuffleOptions: false,
 
       published: publish,
     };
@@ -327,12 +372,40 @@ function CreateExam() {
           }
         );
 
-      const data =
-        await response.json();
+      const responseText =
+        await response.text();
+
+      let data: {
+        message?: string;
+        exam?: unknown;
+      } = {};
+
+      try {
+        data = responseText
+          ? JSON.parse(responseText)
+          : {};
+      } catch {
+        data = {};
+      }
+
+      if (response.status === 401) {
+        setError(
+          "Your instructor session has expired. Please login again."
+        );
+        navigate("/", { replace: true });
+        return;
+      }
+
+      if (response.status === 403) {
+        throw new Error(
+          data.message ||
+            "Instructor access is required to create an exam."
+        );
+      }
 
       if (!response.ok) {
         throw new Error(
-          data?.message ||
+          data.message ||
             "Unable to create exam."
         );
       }
@@ -345,7 +418,7 @@ function CreateExam() {
 
       setTimeout(() => {
         navigate(
-          "/instructor/exams"
+          "/instructor"
         );
       }, 900);
     } catch (requestError) {
@@ -1128,9 +1201,7 @@ function CreateExam() {
                   <div className="flex items-start gap-3">
 
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                      <Minus
-                        size={18}
-                      />
+                      <span className="text-lg font-bold leading-none">−</span>
                     </div>
 
                     <div>
@@ -1249,6 +1320,116 @@ function CreateExam() {
 
                   </div>
                 )}
+
+              </div>
+
+            </div>
+
+          </section>
+
+          {/* =================================================
+              AVAILABILITY
+          ================================================= */}
+
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+            <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
+
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                  <Clock3
+                    size={19}
+                  />
+                </div>
+
+                <div>
+
+                  <h3 className="font-bold text-slate-900">
+                    Exam Availability
+                  </h3>
+
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Set when the published exam starts and when it expires.
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 p-5 sm:p-6 md:grid-cols-2">
+
+              <div>
+
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-600">
+                  Start Date & Time
+                </label>
+
+                <input
+                  type="datetime-local"
+                  value={form.startDate}
+                  onChange={(event) =>
+                    updateField(
+                      "startDate",
+                      event.target.value
+                    )
+                  }
+                  className="
+                    h-12
+                    w-full
+                    rounded-xl
+                    border
+                    border-slate-200
+                    bg-slate-50
+                    px-4
+                    text-sm
+                    font-semibold
+                    text-slate-800
+                    outline-none
+                    focus:border-indigo-400
+                    focus:bg-white
+                    focus:ring-4
+                    focus:ring-indigo-500/10
+                  "
+                />
+
+              </div>
+
+              <div>
+
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-600">
+                  Deadline / End Date & Time
+                </label>
+
+                <input
+                  type="datetime-local"
+                  value={form.endDate}
+                  onChange={(event) =>
+                    updateField(
+                      "endDate",
+                      event.target.value
+                    )
+                  }
+                  className="
+                    h-12
+                    w-full
+                    rounded-xl
+                    border
+                    border-slate-200
+                    bg-slate-50
+                    px-4
+                    text-sm
+                    font-semibold
+                    text-slate-800
+                    outline-none
+                    focus:border-indigo-400
+                    focus:bg-white
+                    focus:ring-4
+                    focus:ring-indigo-500/10
+                  "
+                />
 
               </div>
 

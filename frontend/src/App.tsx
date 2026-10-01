@@ -1,173 +1,90 @@
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-} from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Login from "./pages/Login";
-import ForgotPassword from "./pages/ForgotPassword";
-
+import Register from "./pages/Register";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentProfile from "./pages/StudentProfile";
-
 import InstructorDashboard from "./pages/InstructorDashboard";
+import ExamPage from "./pages/ExamPage";
+import CreateExam from "./pages/CreateExam";
+import EditExam from "./pages/EditExam";
+import ForgotPassword from "./pages/ForgotPassword";
+import QuestionBank from "./pages/QuestionBank";
 import InstructorResults from "./pages/InstructorResults";
 import InstructorAttemptDetails from "./pages/InstructorAttemptDetails";
-
-import ExamPage from "./pages/ExamPage";
-import QuestionBank from "./pages/QuestionBank";
-
-import CreateExam from "./pages/CreateExam";
- import EditExam from "./pages/EditExam"; 
-
-import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Login */}
+        <Route path="/" element={<Login />} />
 
-        {/* =========================
-            PUBLIC ROUTES
-        ========================== */}
-
+        {/* Registration */}
         <Route
-          path="/"
-          element={<Login />}
+          path="/register"
+          element={<Register />}
         />
 
+        {/* Forgot Password */}
         <Route
           path="/forgot-password"
           element={<ForgotPassword />}
         />
 
-
-        {/* =========================
-            STUDENT ROUTES
-        ========================== */}
-
+        {/* Student Dashboard */}
         <Route
           path="/student"
-          element={
-            <ProtectedRoute role="student">
-              <StudentDashboard />
-            </ProtectedRoute>
-          }
+          element={<StudentDashboard />}
         />
 
+        {/* Student Profile */}
         <Route
           path="/student/profile"
-          element={
-            <ProtectedRoute role="student">
-              <StudentProfile />
-            </ProtectedRoute>
-          }
+          element={<StudentProfile />}
         />
 
-        <Route
-          path="/exam/:attemptId"
-          element={
-            <ProtectedRoute role="student">
-              <ExamPage />
-            </ProtectedRoute>
-          }
-        />
-
-
-        {/* =========================
-            INSTRUCTOR DASHBOARD
-        ========================== */}
-
+        {/* Instructor Dashboard */}
         <Route
           path="/instructor"
-          element={
-            <ProtectedRoute role="instructor">
-              <InstructorDashboard />
-            </ProtectedRoute>
-          }
+          element={<InstructorDashboard />}
         />
 
-
-        {/* =========================
-            CREATE EXAM
-        ========================== */}
-
+        {/* Create New Exam */}
         <Route
           path="/instructor/exams/create"
-          element={
-            <ProtectedRoute role="instructor">
-              <CreateExam />
-            </ProtectedRoute>
-          }
+          element={<CreateExam />}
         />
 
-
-        {/* =========================
-            EDIT / MANAGE EXAM
-        ========================== */}
-
-         <Route
+        {/* Manage / Edit Exam */}
+        <Route
           path="/instructor/exams/:examId/edit"
-          element={
-            <ProtectedRoute role="instructor">
-              <EditExam />
-            </ProtectedRoute>
-          }
-        /> 
+          element={<EditExam />}
+        />
 
-
-        {/* =========================
-            QUESTION BANK
-        ========================== */}
-
+        {/* Instructor Question Bank */}
         <Route
           path="/instructor/exams/:examId/questions"
-          element={
-            <ProtectedRoute role="instructor">
-              <QuestionBank />
-            </ProtectedRoute>
-          }
+          element={<QuestionBank />}
         />
 
-
-        {/* =========================
-            EXAM RESULTS
-        ========================== */}
-
+        {/* Instructor Results */}
         <Route
           path="/instructor/exams/:examId/results"
-          element={
-            <ProtectedRoute role="instructor">
-              <InstructorResults />
-            </ProtectedRoute>
-          }
+          element={<InstructorResults />}
         />
 
-
-        {/* =========================
-            INDIVIDUAL STUDENT
-            ATTEMPT DETAILS
-        ========================== */}
-
+        {/* Instructor Attempt Details */}
         <Route
           path="/instructor/attempts/:attemptId"
-          element={
-            <ProtectedRoute role="instructor">
-              <InstructorAttemptDetails />
-            </ProtectedRoute>
-          }
+          element={<InstructorAttemptDetails />}
         />
 
-
-        {/* =========================
-            FALLBACK
-        ========================== */}
-
+        {/* Student Exam Attempt */}
         <Route
-          path="*"
-          element={<Login />}
+          path="/exam/:attemptId"
+          element={<ExamPage />}
         />
-
       </Routes>
     </BrowserRouter>
   );

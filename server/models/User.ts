@@ -7,6 +7,14 @@ export type UserRole =
   | "student"
   | "instructor";
 
+export interface TeachingAssignment {
+  subject: string;
+  degree: string;
+  yearOfStudy: number;
+  semesters: number[];
+  classSections: string[];
+}
+
 export interface IUser
   extends Document {
   name: string;
@@ -19,6 +27,10 @@ export interface IUser
   yearOfStudy?: number;
   semester?: number;
   studentId?: string;
+  classSection?: string;
+
+  institution?: string;
+  teachingAssignments?: TeachingAssignment[];
 
   phone?: string;
   city?: string;
@@ -31,6 +43,60 @@ export interface IUser
   createdAt: Date;
   updatedAt: Date;
 }
+
+const teachingAssignmentSchema =
+  new Schema<TeachingAssignment>(
+    {
+      subject: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 150,
+      },
+
+      degree: {
+        type: String,
+        required: true,
+        trim: true,
+        default: "BCA",
+        maxlength: 50,
+      },
+
+      yearOfStudy: {
+        type: Number,
+        required: true,
+        min: 1,
+        max: 3,
+      },
+
+      semesters: {
+        type: [Number],
+        required: true,
+        validate: {
+          validator: (value: number[]) =>
+            Array.isArray(value) &&
+            value.length > 0 &&
+            value.every((semester) =>
+              [1, 2, 3, 4, 5, 6].includes(semester)
+            ),
+          message: "At least one valid semester is required",
+        },
+      },
+
+      classSections: {
+        type: [String],
+        required: true,
+        validate: {
+          validator: (value: string[]) =>
+            Array.isArray(value) &&
+            value.length > 0 &&
+            value.every((section) => Boolean(section.trim())),
+          message: "At least one class section is required",
+        },
+      },
+    },
+    { _id: false }
+  );
 
 const userSchema =
   new Schema<IUser>(
@@ -89,6 +155,23 @@ const userSchema =
         type: String,
         trim: true,
         maxlength: 50,
+      },
+
+      classSection: {
+        type: String,
+        trim: true,
+        maxlength: 20,
+      },
+
+      institution: {
+        type: String,
+        trim: true,
+        maxlength: 150,
+      },
+
+      teachingAssignments: {
+        type: [teachingAssignmentSchema],
+        default: [],
       },
 
       phone: {

@@ -32,6 +32,8 @@ interface ScoreResult {
   correctCount: number;
   incorrectCount: number;
   unansweredCount: number;
+  answeredCount: number;
+  passingMarks: number;
 }
 
 /* =========================================================
@@ -186,6 +188,12 @@ const calculateScore = async (
     score >=
     Number(exam.passingMarks || 0);
 
+  const answeredCount =
+    correctCount + incorrectCount;
+
+  const passingMarks =
+    Number(exam.passingMarks || 0);
+
   return {
     score,
     totalMarks,
@@ -194,7 +202,51 @@ const calculateScore = async (
     correctCount,
     incorrectCount,
     unansweredCount,
+    answeredCount,
+    passingMarks,
   };
+};
+
+/* =========================================================
+   EFFECTIVE END TIME
+========================================================= */
+
+const getEffectiveEndTime = (
+  attempt: IAttempt,
+  exam: any
+): Date => {
+  const attemptEndTime = new Date(
+    attempt.endTime
+  );
+
+  if (exam.endDate) {
+    const examEndTime = new Date(
+      exam.endDate
+    );
+
+    if (
+      examEndTime.getTime() <
+      attemptEndTime.getTime()
+    ) {
+      return examEndTime;
+    }
+  }
+
+  return attemptEndTime;
+};
+
+const areResultsAvailable = (
+  exam: any,
+  now = new Date()
+): boolean => {
+  if (!exam.endDate) {
+    return true;
+  }
+
+  return (
+    now.getTime() >=
+    new Date(exam.endDate).getTime()
+  );
 };
 
 /* =========================================================
@@ -208,7 +260,7 @@ const closeExpiredAttempt = async (
   if (
     attempt.status !== "IN_PROGRESS" ||
     new Date() <
-      new Date(attempt.endTime)
+      getEffectiveEndTime(attempt, exam)
   ) {
     return false;
   }
@@ -222,7 +274,7 @@ const closeExpiredAttempt = async (
   attempt.status = "TIMED_OUT";
 
   attempt.submittedAt =
-    attempt.endTime;
+    getEffectiveEndTime(attempt, exam);
 
   attempt.score =
     result.score;
@@ -422,8 +474,9 @@ router.get(
               0,
               Math.floor(
                 (
-                  new Date(
-                    attempt.endTime
+                  getEffectiveEndTime(
+                    attempt,
+                    exam
                   ).getTime() -
                   now.getTime()
                 ) / 1000
@@ -506,11 +559,14 @@ router.get(
         (attempt.answers ||
           {}) as AnswerMap;
 
+      const resultsAvailable =
+        areResultsAvailable(exam, now);
+
       const result =
-        attempt.status ===
-        "IN_PROGRESS"
-          ? null
-          : {
+        resultsAvailable &&
+        attempt.status !==
+          "IN_PROGRESS"
+          ? {
               score:
                 attempt.score ?? 0,
               totalMarks:
@@ -522,7 +578,23 @@ router.get(
               passed:
                 attempt.passed ??
                 false,
-            };
+              answeredCount:
+                Object.values(answers).filter(
+                  (answer) =>
+                    Array.isArray(answer) &&
+                    answer.length > 0
+                ).length,
+              unansweredCount:
+                attempt.questionIds.length -
+                Object.values(answers).filter(
+                  (answer) =>
+                    Array.isArray(answer) &&
+                    answer.length > 0
+                ).length,
+              passingMarks:
+                Number(exam.passingMarks || 0),
+            }
+          : null;
 
       return res.status(200).json({
         attempt: {
@@ -571,6 +643,7 @@ router.get(
         remainingSeconds,
 
         result,
+        resultsAvailable,
       });
     } catch (error) {
       console.error(
@@ -989,11 +1062,14 @@ router.post(
 
       const now = new Date();
 
-      const isExpired =
-        now >=
-        new Date(
-          attempt.endTime
+      const effectiveEndTime =
+        getEffectiveEndTime(
+          attempt,
+          exam
         );
+
+      const isExpired =
+        now >= effectiveEndTime;
 
       const result =
         await calculateScore(
@@ -1015,7 +1091,7 @@ router.post(
 
       attempt.submittedAt =
         isExpired
-          ? attempt.endTime
+          ? effectiveEndTime
           : now;
 
       attempt.status =
@@ -1039,22 +1115,37 @@ router.post(
             attempt.submittedAt,
         },
 
-        result: {
-          score:
-            result.score,
-          totalMarks:
-            result.totalMarks,
-          percentage:
-            result.percentage,
-          passed:
-            result.passed,
-          correctCount:
-            result.correctCount,
-          incorrectCount:
-            result.incorrectCount,
-          unansweredCount:
-            result.unansweredCount,
-        },
+        result: areResultsAvailable(
+          exam,
+          now
+        )
+          ? {
+              score:
+                result.score,
+              totalMarks:
+                result.totalMarks,
+              percentage:
+                result.percentage,
+              passed:
+                result.passed,
+              correctCount:
+                result.correctCount,
+              incorrectCount:
+                result.incorrectCount,
+              unansweredCount:
+                result.unansweredCount,
+              answeredCount:
+                result.answeredCount,
+              passingMarks:
+                result.passingMarks,
+            }
+          : null,
+
+        resultsAvailable:
+          areResultsAvailable(
+            exam,
+            now
+          ),
       });
     } catch (error) {
       console.error(
@@ -1148,11 +1239,21 @@ router.get(
         }
       }
 
-      const result =
-        await calculateScore(
-          attempt,
-          exam
+      const now = new Date();
+
+      const resultsAvailable =
+        areResultsAvailable(
+          exam,
+          now
         );
+
+      const result =
+        resultsAvailable
+          ? await calculateScore(
+              attempt,
+              exam
+            )
+          : null;
 
       return res.status(200).json({
         attempt: {
@@ -1180,6 +1281,7 @@ router.get(
         },
 
         result,
+        resultsAvailable,
       });
     } catch (error) {
       console.error(
@@ -1222,6 +1324,27 @@ router.get(
 
       if (!exam) {
         return;
+      }
+
+      const now = new Date();
+
+      if (!areResultsAvailable(exam, now)) {
+        return res.status(200).json({
+          exam: {
+            _id: exam._id,
+            title: exam.title,
+            subject: exam.subject,
+            degree: exam.degree,
+            yearOfStudy: exam.yearOfStudy,
+            semester: exam.semester,
+            duration: exam.duration,
+            questionCount: exam.questionCount,
+            totalMarks: exam.totalMarks,
+            passingMarks: exam.passingMarks,
+          },
+          resultsAvailable: false,
+          attempts: [],
+        });
       }
 
       /*
@@ -1358,6 +1481,8 @@ router.get(
             exam.passingMarks,
         },
 
+        resultsAvailable: true,
+
         attempts:
           formattedAttempts,
       });
@@ -1402,6 +1527,15 @@ router.get(
 
       if (!exam) {
         return;
+      }
+
+      const now = new Date();
+
+      if (!areResultsAvailable(exam, now)) {
+        return res.status(200).json({
+          attempts: [],
+          resultsAvailable: false,
+        });
       }
 
       const attempts =
@@ -1449,6 +1583,7 @@ router.get(
       return res.status(200).json({
         attempts:
           updatedAttempts,
+        resultsAvailable: true,
       });
     } catch (error) {
       console.error(
@@ -1540,6 +1675,39 @@ router.get(
         return res.status(403).json({
           message:
             "You do not have access to this attempt",
+        });
+      }
+
+      const now = new Date();
+
+      if (!areResultsAvailable(exam, now)) {
+        return res.status(200).json({
+          attempt: {
+            _id: attempt._id,
+            status: attempt.status,
+            startTime: attempt.startTime,
+            endTime: attempt.endTime,
+            submittedAt: attempt.submittedAt,
+            tabSwitchCount: attempt.tabSwitchCount,
+          },
+          student: attempt.studentId,
+          exam: {
+            _id: exam._id,
+            title: exam.title,
+            subject: exam.subject,
+            degree: exam.degree,
+            yearOfStudy: exam.yearOfStudy,
+            semester: exam.semester,
+            duration: exam.duration,
+            questionCount: exam.questionCount,
+            totalMarks: exam.totalMarks,
+            passingMarks: exam.passingMarks,
+            negativeMarking: exam.negativeMarking,
+            negativePenalty: exam.negativePenalty,
+          },
+          result: null,
+          questions: [],
+          resultsAvailable: false,
         });
       }
 
@@ -1722,6 +1890,8 @@ router.get(
         },
 
         result,
+
+        resultsAvailable: true,
 
         questions:
           questionResults,

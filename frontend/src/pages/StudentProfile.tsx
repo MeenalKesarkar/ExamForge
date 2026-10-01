@@ -31,7 +31,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAppDispatch, useAppSelector } from "../redux/hooks";
 
-import { login, logout, updateUser } from "../redux/slices/authSlice";
+import { login, logout } from "../redux/slices/authSlice";
 
 const API_URL = "http://localhost:5000/api";
 
@@ -98,14 +98,19 @@ const semestersForYear = (year: number) => [year * 2 - 1, year * 2];
 
 // Makes year and semester consistent (infers the year from the semester if needed)
 const normalizeAcademic = (year?: number, semester?: number) => {
+  const numericYear = Number(year);
+  const numericSemester = Number(semester);
+
   const validSemester =
-    semester !== undefined && semester >= 1 && semester <= 6
-      ? semester
+    Number.isInteger(numericSemester) &&
+    numericSemester >= 1 &&
+    numericSemester <= 6
+      ? numericSemester
       : undefined;
 
   const validYear =
-    year === 1 || year === 2 || year === 3
-      ? year
+    numericYear === 1 || numericYear === 2 || numericYear === 3
+      ? numericYear
       : validSemester
       ? Math.ceil(validSemester / 2)
       : 1;
@@ -121,38 +126,132 @@ const normalizeAcademic = (year?: number, semester?: number) => {
   };
 };
 
-// Crops to a square and shrinks to a small JPEG so the save request stays tiny
-const resizeImage = (file: File, size = 256): Promise<string> =>
+// Crops to a square and keeps the profile picture sharp while keeping the
+// encoded image small enough for the existing profile API.
+const resizeImage = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const image = new Image();
 
     image.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = size;
-      canvas.height = size;
+      try {
+        const side = Math.min(
+          image.naturalWidth,
+          image.naturalHeight
+        );
+        const sx =
+          (image.naturalWidth - side) / 2;
+        const sy =
+          (image.naturalHeight - side) / 2;
 
-      const context = canvas.getContext("2d");
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
 
-      if (!context) {
+        if (!context) {
+          throw new Error(
+            "Your browser cannot process images."
+          );
+        }
+
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+
+        // Start with a larger, high-quality image. If the encoded result
+        // is too large, progressively reduce the quality/resolution.
+        // This avoids the very small 256px/low-quality image that was
+        // making the profile picture look blurry.
+        const attempts = [
+          { pixels: 768, quality: 0.94 },
+          { pixels: 768, quality: 0.88 },
+          { pixels: 640, quality: 0.94 },
+          { pixels: 640, quality: 0.88 },
+          { pixels: 512, quality: 0.94 },
+          { pixels: 512, quality: 0.88 },
+          { pixels: 448, quality: 0.90 },
+          { pixels: 384, quality: 0.90 },
+        ];
+
+        // Keep the image comfortably below the existing Express JSON
+        // body limit while allowing substantially more detail.
+        const maxDataUrlLength = 180_000;
+        let best = "";
+
+        for (const attempt of attempts) {
+          const pixels = Math.min(
+            attempt.pixels,
+            side
+          );
+
+          canvas.width = pixels;
+          canvas.height = pixels;
+
+          context.clearRect(
+            0,
+            0,
+            pixels,
+            pixels
+          );
+
+          context.drawImage(
+            image,
+            sx,
+            sy,
+            side,
+            side,
+            0,
+            0,
+            pixels,
+            pixels
+          );
+
+          // WebP gives better quality at this payload size.
+          // JPEG remains the fallback for browsers that do not support it.
+          let encoded = canvas.toDataURL(
+            "image/webp",
+            attempt.quality
+          );
+
+          if (!encoded.startsWith("data:image/webp")) {
+            encoded = canvas.toDataURL(
+              "image/jpeg",
+              attempt.quality
+            );
+          }
+
+          if (encoded.length <= maxDataUrlLength) {
+            best = encoded;
+            break;
+          }
+        }
+
         URL.revokeObjectURL(url);
-        reject(new Error("Your browser cannot process images."));
-        return;
+
+        if (!best) {
+          throw new Error(
+            "This image could not be compressed enough to save. Please choose another image."
+          );
+        }
+
+        resolve(best);
+      } catch (error) {
+        URL.revokeObjectURL(url);
+        reject(
+          error instanceof Error
+            ? error
+            : new Error(
+                "Unable to process the selected image."
+              )
+        );
       }
-
-      const side = Math.min(image.width, image.height);
-      const sx = (image.width - side) / 2;
-      const sy = (image.height - side) / 2;
-
-      context.drawImage(image, sx, sy, side, side, 0, 0, size, size);
-
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.85));
     };
 
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error("Unable to read the selected image."));
+      reject(
+        new Error(
+          "Unable to read the selected image."
+        )
+      );
     };
 
     image.src = url;
@@ -683,6 +782,13 @@ function StudentProfile() {
 
   const dispatch = useAppDispatch();
 
+  const authUser = useAppSelector(
+    (state) => state.auth.user
+  ) as ProfileUser | null;
+
+  const authUserRef = useRef<ProfileUser | null>(authUser);
+  authUserRef.current = authUser;
+
   // FORM STATE
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -766,6 +872,15 @@ function StudentProfile() {
         });
 
         if (response.status === 401) {
+          // Keep the student on the profile page when the profile
+          // endpoint rejects the request but the logged-in student
+          // is still available in Redux.
+          if (authUserRef.current) {
+            applyUser(authUserRef.current);
+            setError("");
+            return;
+          }
+
           navigate("/");
           return;
         }
@@ -895,17 +1010,26 @@ function StudentProfile() {
     const selectedYear = Number(event.target.value);
     const options = semestersForYear(selectedYear);
 
+    // Selecting a year must also set a valid semester for that year.
+    // This makes the selected Year of Study the exact academic value
+    // that is saved when the user clicks Save Changes.
     setYearOfStudy(selectedYear);
-
-    if (!options.includes(semester)) {
-      setSemester(options[0]);
-    }
+    setSemester(options[0]);
 
     setSuccess("");
   };
 
   const handleSemesterChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    setSemester(Number(event.target.value));
+    const selectedSemester = Number(event.target.value);
+
+    // Semester numbers are absolute across the BCA programme:
+    // 1-2 = 1st Year, 3-4 = 2nd Year, 5-6 = 3rd Year.
+    // Keep Year of Study synchronized with the selected semester so
+    // the value sent to the backend is always a valid academic pair.
+    const selectedYear = Math.ceil(selectedSemester / 2);
+
+    setSemester(selectedSemester);
+    setYearOfStudy(selectedYear);
     setSuccess("");
   };
 
@@ -966,30 +1090,61 @@ function StudentProfile() {
     try {
       setSaving(true);
 
-      const response = await fetch(`${API_URL}/profile/me`, {
-        method: "PUT",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          name: name.trim(),
-          phone: phone.trim(),
-          city: city.trim(),
-          bio: bio.trim(),
-          degree: "BCA",
-          yearOfStudy,
-          semester,
-          profilePicture,
-        }),
-      });
+      const updatePayload: Record<string, unknown> = {
+        name: name.trim(),
+        phone: phone.trim(),
+        city: city.trim(),
+        bio: bio.trim(),
+        degree: "BCA",
+        yearOfStudy,
+        semester,
+        studentId: studentId.trim(),
+      };
 
-      const data = await response.json();
+      // Do not resend an already-saved profile picture when it has not
+      // changed. This prevents an old oversized stored value from
+      // blocking unrelated profile changes such as year or semester.
+      if (profilePicture !== (initial?.profilePicture ?? null)) {
+        updatePayload.profilePicture = profilePicture || "";
+      }
+
+      const updateProfile = () =>
+        fetch(`${API_URL}/profile/me`, {
+          method: "PUT",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(updatePayload),
+        });
+
+      // The access-token cookie expires after a short period.
+      // Refresh the session once and retry the save instead of
+      // losing the changes or sending the student back to login.
+      let response = await updateProfile();
 
       if (response.status === 401) {
-        navigate("/");
-        return;
+        const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+
+        if (refreshResponse.ok) {
+          response = await updateProfile();
+        }
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await response.json()
+        : { message: await response.text() };
+
+      if (response.status === 401) {
+        throw new Error(
+          "Your session has expired. Please log in again and save your changes."
+        );
       }
 
       if (!response.ok) {
@@ -998,25 +1153,43 @@ function StudentProfile() {
 
       const updatedUser: ProfileUser = data.user;
 
-      applyUser(updatedUser);
-
-      const academic = normalizeAcademic(
-        updatedUser.yearOfStudy ?? yearOfStudy,
+      // Use the values returned by the backend, with the values that
+      // were just saved as a fallback. This keeps the academic section
+      // and the profile header synchronized immediately after saving.
+      const savedYear = Number(
+        updatedUser.yearOfStudy ?? yearOfStudy
+      );
+      const savedSemester = Number(
         updatedUser.semester ?? semester
       );
 
+      const savedUser: ProfileUser = {
+        ...updatedUser,
+        yearOfStudy: savedYear,
+        semester: savedSemester,
+      };
+
+      // Update the complete profile form and its saved snapshot.
+      applyUser(savedUser);
+
+      // Update Redux with the exact academic values that were saved.
+      // The profile header reads its academic information from Redux.
       dispatch(
-        updateUser({
-          name: updatedUser.name,
-          email: updatedUser.email,
-          degree: "BCA",
-          yearOfStudy: academic.year,
-          semester: academic.semester,
-          studentId: updatedUser.studentId,
-          phone: updatedUser.phone,
-          city: updatedUser.city,
-          bio: updatedUser.bio,
-          profilePicture: updatedUser.profilePicture || undefined,
+        login({
+          user: {
+            id: savedUser.id || savedUser._id || "",
+            name: savedUser.name,
+            email: savedUser.email,
+            role: savedUser.role,
+            degree: "BCA",
+            yearOfStudy: savedYear,
+            semester: savedSemester,
+            studentId: savedUser.studentId,
+            phone: savedUser.phone,
+            city: savedUser.city,
+            bio: savedUser.bio,
+            profilePicture: savedUser.profilePicture || undefined,
+          },
         })
       );
 
@@ -1034,7 +1207,10 @@ function StudentProfile() {
   // DERIVED VALUES
   // ====================================================
 
-  const semesterOptions = semestersForYear(yearOfStudy);
+  // Keep all semester values available in the dropdown.
+  // Selecting a semester automatically synchronizes Year of Study
+  // through handleSemesterChange above.
+  const semesterOptions = [1, 2, 3, 4, 5, 6];
 
   const completion = [
     { label: "Full name", done: Boolean(name.trim()) },
