@@ -3,8 +3,7 @@ import { ArrowLeft, BarChart3, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import InstructorAttemptResultsList from "../components/InstructorAttemptResultsList";
 import type { Attempt } from "../features/instructorResults";
-
-const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/$/, "");
+import { API_URL } from "../apiConfig";
 
 interface ExamResultGroup {
   _id: string;

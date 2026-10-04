@@ -15,9 +15,7 @@ import StudentDashboardGuide from "../features/student/components/StudentDashboa
 import LogoutConfirmation from "../features/student/components/LogoutConfirmation";
 import StudentDashboardFooter from "../features/student/components/StudentDashboardFooter";
 import { formatDateTime } from "../features/student/formatDateTime";
-
-const API_URL =
-  "http://localhost:5000/api";
+import { API_URL } from "../apiConfig";
 
 
 
@@ -51,7 +49,12 @@ function StudentDashboard() {
     useState("");
 
   const [filter, setFilter] =
-    useState<FilterType>("all");
+    useState<FilterType>(() => {
+      const savedPreference = localStorage.getItem("examforge:student-exam-filter");
+      return savedPreference === "negative" || savedPreference === "no-negative"
+        ? savedPreference
+        : "all";
+    });
 
   const [
     startingExamId,

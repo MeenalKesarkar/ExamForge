@@ -30,13 +30,11 @@ import {
 import {
   useNavigate,
 } from "react-router-dom";
+import { API_URL } from "../apiConfig";
 
 // ======================================================
 // CONFIG
 // ======================================================
-
-const API_URL =
-  "http://localhost:5000/api";
 
 // ======================================================
 // TYPES
@@ -601,15 +599,6 @@ function InstructorDashboard() {
 
             <button
               type="button"
-              onClick={() => navigate("/instructor/results")}
-              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 hover:text-indigo-600"
-            >
-              <BarChart3 className="h-4 w-4" />
-              Results
-            </button>
-
-            <button
-              type="button"
               onClick={() => navigate("/instructor/students")}
               className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 hover:text-indigo-600"
             >
@@ -723,18 +712,6 @@ function InstructorDashboard() {
                 <LayoutDashboard className="h-4 w-4" />
 
                 Dashboard
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  navigate("/instructor/results");
-                }}
-                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
-              >
-                <BarChart3 className="h-4 w-4" />
-                Results
               </button>
 
               <button

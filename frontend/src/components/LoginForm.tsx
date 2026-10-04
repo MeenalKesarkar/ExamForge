@@ -97,10 +97,10 @@ export default function LoginForm({ email, setEmail, password, setPassword, reme
                                 outline-none
                                 transition
                                 placeholder:text-slate-400
-                                focus:border-[#6347ff]
+                                focus:border-[#8e5cdb]
                                 focus:bg-white
                                 focus:ring-4
-                                focus:ring-[#6347ff]/10
+                                focus:ring-[#8e5cdb]/10
                                 disabled:cursor-not-allowed
                                 disabled:opacity-60
                               "
@@ -147,9 +147,9 @@ export default function LoginForm({ email, setEmail, password, setPassword, reme
                                 shrink-0
                                 text-sm
                                 font-semibold
-                                text-[#5138ff]
+                                text-[#7942c5]
                                 transition
-                                hover:text-[#8b16f5]
+                                hover:text-[#6534a8]
                                 hover:underline
                               "
                             >
@@ -213,10 +213,10 @@ export default function LoginForm({ email, setEmail, password, setPassword, reme
                                 outline-none
                                 transition
                                 placeholder:text-slate-400
-                                focus:border-[#6347ff]
+                                focus:border-[#8e5cdb]
                                 focus:bg-white
                                 focus:ring-4
-                                focus:ring-[#6347ff]/10
+                                focus:ring-[#8e5cdb]/10
                                 disabled:cursor-not-allowed
                                 disabled:opacity-60
                               "
@@ -316,7 +316,7 @@ export default function LoginForm({ email, setEmail, password, setPassword, reme
                               cursor-pointer
                               rounded
                               border-slate-300
-                              accent-[#5b3df5]
+                              accent-[#8e5cdb]
                             "
                           />
     
@@ -351,9 +351,9 @@ export default function LoginForm({ email, setEmail, password, setPassword, reme
                             gap-2
                             rounded-xl
                             bg-gradient-to-r
-                            from-[#4c39f5]
-                            via-[#6534f7]
-                            to-[#a20cff]
+                            from-[#6534a8]
+                            via-[#8e5cdb]
+                            to-[#6534a8]
                             px-5
                             text-sm
                             font-bold

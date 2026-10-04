@@ -94,6 +94,7 @@ export interface RefreshResponse {
 
 export interface ForgotPasswordResponse {
   message: string;
+  otpExpiresInMinutes?: number;
 }
 
 export interface VerifyOTPResponse {

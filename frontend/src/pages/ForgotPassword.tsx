@@ -47,6 +47,9 @@ function ForgotPassword() {
   const [otp, setOtp] =
     useState("");
 
+  const [otpExpiryMinutes, setOtpExpiryMinutes] =
+    useState(10);
+
   const [resetToken, setResetToken] =
     useState("");
 
@@ -111,9 +114,11 @@ function ForgotPassword() {
       try {
         setLoading(true);
 
-        await sendForgotPasswordOTP(
+        const result = await sendForgotPasswordOTP(
           normalizedEmail
         );
+
+        setOtpExpiryMinutes(result.otpExpiresInMinutes || 10);
 
         setSuccess(
           "If an account exists with this email, an OTP has been sent."
@@ -198,9 +203,11 @@ function ForgotPassword() {
       try {
         setResending(true);
 
-        await sendForgotPasswordOTP(
+        const result = await sendForgotPasswordOTP(
           email
         );
+
+        setOtpExpiryMinutes(result.otpExpiresInMinutes || 10);
 
         setSuccess(
           "A new OTP has been sent."
@@ -673,7 +680,7 @@ function ForgotPassword() {
                   />
 
                   <p className="mt-2 text-xs text-slate-400">
-                    The OTP is valid for 10 minutes.
+                    The OTP is valid for {otpExpiryMinutes} minutes.
                   </p>
 
                 </div>

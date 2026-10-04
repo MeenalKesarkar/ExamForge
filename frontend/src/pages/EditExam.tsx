@@ -23,8 +23,7 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-
-const API_URL = "http://localhost:5000/api";
+import { API_URL } from "../apiConfig";
 
 // ======================================================
 // TYPES

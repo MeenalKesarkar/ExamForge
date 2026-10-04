@@ -439,6 +439,16 @@ router.put(
         );
 
         if (
+          user.role === "student" &&
+          user.yearOfStudy != null &&
+          yearOfStudy !== user.yearOfStudy
+        ) {
+          return res.status(400).json({
+            message: "Year of study cannot be changed after registration",
+          });
+        }
+
+        if (
           !Number.isInteger(yearOfStudy) ||
           yearOfStudy < 1 ||
           yearOfStudy > 3
@@ -459,6 +469,16 @@ router.put(
         const semester = Number(
           req.body.semester
         );
+
+        if (
+          user.role === "student" &&
+          user.semester != null &&
+          semester !== user.semester
+        ) {
+          return res.status(400).json({
+            message: "Semester cannot be changed after registration",
+          });
+        }
 
         if (
           !Number.isInteger(semester) ||

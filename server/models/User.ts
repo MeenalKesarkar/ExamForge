@@ -64,6 +64,9 @@ export interface IUser
   profilePicture?: string | null;
 
   isActive: boolean;
+  isGraduated: boolean;
+  graduatedAt?: Date;
+  graduatedBy?: mongoose.Types.ObjectId;
 
   approvedAt?: Date;
   approvedBy?: mongoose.Types.ObjectId;
@@ -317,6 +320,21 @@ const userSchema =
         type: Boolean,
         default: true,
         required: true,
+      },
+
+      isGraduated: {
+        type: Boolean,
+        default: false,
+        required: true,
+      },
+
+      graduatedAt: {
+        type: Date,
+      },
+
+      graduatedBy: {
+        type: Schema.Types.ObjectId,
+        ref: "User",
       },
 
       // --------------------------------------------------

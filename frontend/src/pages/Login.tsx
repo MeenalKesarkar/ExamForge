@@ -259,7 +259,7 @@ export default function Login() {
         min-h-screen
         w-full
         overflow-x-hidden
-        bg-[#05091f]
+        bg-[#130f1c]
       "
     >
 

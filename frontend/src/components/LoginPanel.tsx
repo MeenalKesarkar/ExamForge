@@ -62,7 +62,7 @@ export default function LoginPanel({ email, setEmail, password, setPassword, rem
                             border
                             border-slate-200
                             bg-white
-                            shadow-[0_20px_70px_rgba(17,25,54,0.10)]
+                            shadow-[0_20px_70px_rgba(24,42,36,0.10)]
                           "
                         >
           
@@ -73,9 +73,9 @@ export default function LoginPanel({ email, setEmail, password, setPassword, rem
                               h-1.5
                               w-full
                               bg-gradient-to-r
-                              from-[#4f39ff]
-                              via-[#6937ff]
-                              to-[#b10cff]
+                              from-[#7942c5]
+                              via-[#8e5cdb]
+                              to-[#6534a8]
                             "
                           />
           
@@ -196,9 +196,9 @@ export default function LoginPanel({ email, setEmail, password, setPassword, rem
                                       gap-2
                                       text-sm
                                       font-semibold
-                                      text-[#5138ff]
+                                      text-[#7942c5]
                                       transition
-                                      hover:text-[#8b16f5]
+                                      hover:text-[#6534a8]
                                       hover:underline
                                     "
                                   >

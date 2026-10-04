@@ -335,12 +335,19 @@ export default function StudentDashboardHeader({
                               Student Account
                             </span>
                           </button>
-                          <div className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-600">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsProfileOpen(false);
+                              navigate("/student/preferences");
+                            }}
+                            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-slate-600 transition hover:bg-slate-50 hover:text-indigo-600"
+                          >
                             <Settings className="h-4 w-4" />
                             <span className="font-medium">
                               Exam preferences
                             </span>
-                          </div>
+                          </button>
                         </div>
                         <div className="border-t border-slate-100 p-2">
                           <button

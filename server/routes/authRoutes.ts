@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import crypto from "crypto";
+import nodemailer from "nodemailer";
 
 import User from "../models/User";
 import PasswordReset from "../models/PasswordReset";
@@ -29,8 +30,23 @@ const ACCESS_TOKEN_EXPIRES_IN =
 const SESSION_LIFETIME_MS =
   24 * 60 * 60 * 1000;
 
-const OTP_EXPIRY_MINUTES = 10;
+const configuredOtpExpiry = Number(process.env.PASSWORD_RESET_OTP_EXPIRES_MINUTES);
+const OTP_EXPIRY_MINUTES = Number.isInteger(configuredOtpExpiry) && configuredOtpExpiry >= 1 && configuredOtpExpiry <= 60
+  ? configuredOtpExpiry
+  : 10;
 const MAX_OTP_ATTEMPTS = 5;
+const smtpPort = Number(process.env.SMTP_PORT || 587);
+const smtpHost = process.env.SMTP_HOST?.trim() || "";
+const smtpUser = process.env.SMTP_USER?.trim() || "";
+const smtpPassword = process.env.SMTP_PASS?.trim() || "";
+const smtpFrom = process.env.SMTP_FROM?.trim() || smtpUser;
+const smtpSecure = process.env.SMTP_SECURE?.trim().toLowerCase() === "true" || smtpPort === 465;
+const isPlaceholder = (value: string) => /^(your_|replace|changeme|example|<|\$\{)/i.test(value);
+const smtpConfigured = Boolean(
+  smtpHost && Number.isInteger(smtpPort) && smtpPort > 0 && smtpPort <= 65535 &&
+  smtpUser && smtpPassword && smtpFrom &&
+  ![smtpHost, smtpUser, smtpPassword, smtpFrom].some(isPlaceholder)
+);
 
 // =========================================================
 // Types
@@ -1203,6 +1219,10 @@ router.post(
         });
       }
 
+      if (!smtpConfigured) {
+        return res.status(503).json({ message: "Password reset email is not configured. Please contact support." });
+      }
+
       const user =
         await User.findOne({
           email,
@@ -1246,7 +1266,7 @@ router.post(
               1000
         );
 
-      await PasswordReset.create({
+      const resetRequest = await PasswordReset.create({
         userId:
           user._id,
 
@@ -1268,22 +1288,34 @@ router.post(
           null,
       });
 
-      /*
-       * DEVELOPMENT MODE
-       *
-       * We don't have an email provider connected yet.
-       * Therefore the OTP is logged on the backend.
-       *
-       * In production, replace this with an email service.
-       */
-
-      console.log(
-        `ExamForge password reset OTP for ${email}: ${otp}`
-      );
+      if (smtpConfigured) {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpSecure,
+          auth: { user: smtpUser, pass: smtpPassword },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 15000,
+        });
+        try {
+          await transporter.sendMail({
+            from: smtpFrom,
+            to: user.email,
+            subject: "Your ExamForge password reset code",
+            text: `Your ExamForge verification code is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes. If you did not request this, ignore this email.`,
+            html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#211a2d"><h2>Reset your ExamForge password</h2><p>Enter this one-time code to continue:</p><p style="font-size:30px;font-weight:700;letter-spacing:8px;color:#7942c5">${otp}</p><p>This code expires in ${OTP_EXPIRY_MINUTES} minutes. If you did not request it, you can ignore this email.</p></div>`,
+          });
+        } catch (mailError) {
+          await PasswordReset.deleteOne({ _id: resetRequest._id });
+          console.error("Password reset email delivery failed:", mailError instanceof Error ? mailError.message : "Unknown SMTP error");
+          return res.status(502).json({ message: "Could not deliver the reset email. Check the SMTP settings and try again." });
+        }
+      }
 
       return res.status(200).json({
-        message:
-          "If an account exists for this email, an OTP has been sent.",
+        message: "If an account exists for this email, an OTP has been sent.",
+        otpExpiresInMinutes: OTP_EXPIRY_MINUTES,
       });
     } catch (error) {
       console.error(

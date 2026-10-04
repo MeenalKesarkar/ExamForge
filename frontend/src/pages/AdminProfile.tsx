@@ -3,8 +3,8 @@ import { ArrowLeft, CheckCircle2, LoaderCircle, Save, ShieldCheck } from "lucide
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../redux/hooks";
 import { updateUser } from "../redux/slices/authSlice";
+import { API_URL } from "../apiConfig";
 
-const API_URL = "http://localhost:5000/api";
 const inputClass = "block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100";
 interface AdminProfileData { id?: string; name: string; email: string; role: "admin"; institution?: string; phone?: string; city?: string; bio?: string; }
 interface ProfileForm { name: string; phone: string; city: string; bio: string; }

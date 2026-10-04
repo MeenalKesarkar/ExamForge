@@ -21,6 +21,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { API_URL } from "../apiConfig";
 
 interface Exam {
   _id: string;
@@ -62,8 +63,6 @@ interface FormState {
   explanation: string;
   difficulty: "easy" | "medium" | "hard";
 }
-
-const API_URL = "http://localhost:5000/api";
 
 const emptyForm: FormState = {
   questionText: "",

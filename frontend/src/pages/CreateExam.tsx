@@ -15,12 +15,11 @@ import {
   Target,
   X,
 } from "lucide-react";
+import { API_URL } from "../apiConfig";
 
 // ======================================================
 // CONFIG
 // ======================================================
-
-const API_URL = "http://localhost:5000/api";
 
 // ======================================================
 // TYPES
@@ -448,7 +447,7 @@ function CreateExam() {
   // ====================================================
 
   return (
-    <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
+    <div className="min-h-screen bg-[#faf9fc] text-slate-900">
 
       {/* =================================================
           HEADER

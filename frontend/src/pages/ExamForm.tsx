@@ -14,6 +14,7 @@ import {
   Settings2,
   Sparkles,
 } from "lucide-react";
+import { API_URL } from "../apiConfig";
 
 interface ExamFormData {
   title: string;
@@ -57,8 +58,6 @@ interface ExamResponse {
   shuffleOptions?: boolean;
   published: boolean;
 }
-
-const API_URL = "http://localhost:5000/api";
 
 const initialForm: ExamFormData = {
   title: "",

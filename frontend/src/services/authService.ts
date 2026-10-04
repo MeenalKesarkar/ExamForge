@@ -1,14 +1,10 @@
 import type { ForgotPasswordResponse, LoginRequest, LoginResponse, RefreshResponse, RegisterRequest, RegisterResponse, ResetPasswordResponse, VerifyOTPResponse } from "../features/authTypes";
+import { API_URL } from "../apiConfig";
 export type { AccountStatus, AuthUser, ForgotPasswordResponse, LoginRequest, LoginResponse, RefreshResponse, RegisterRequest, RegisterResponse, ResetPasswordResponse, TeachingAssignment, UserRole, VerifyOTPResponse } from "../features/authTypes";
 
 // ======================================================
 // EXAMFORGE - AUTH SERVICE
 // ======================================================
-
-const API_URL = (
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:5000/api"
-).replace(/\/$/, "");
 
 // ======================================================
 // PARSE RESPONSE

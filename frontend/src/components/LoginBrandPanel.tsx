@@ -11,9 +11,9 @@ export default function LoginBrandPanel() {
                         w-full
                         overflow-hidden
                         bg-gradient-to-br
-                        from-[#15104f]
-                        via-[#24117c]
-                        to-[#6d16df]
+                        from-[#2b174a]
+                        via-[#532d87]
+                        to-[#8e5cdb]
                         lg:flex
                         lg:w-[46%]
                         xl:w-[48%]

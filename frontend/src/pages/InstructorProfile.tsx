@@ -33,9 +33,8 @@ import {
 import {
   updateUser,
 } from "../redux/slices/authSlice";
+import { API_URL } from "../apiConfig";
 
-const API_URL =
-  "http://localhost:5000/api";
 
 interface TeachingAssignment {
   subject: string;

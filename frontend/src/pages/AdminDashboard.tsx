@@ -4,8 +4,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../redux/hooks";
 import { logout } from "../redux/slices/authSlice";
 import { logoutUser } from "../services/authService";
+import { API_URL } from "../apiConfig";
 
-const API_URL = "http://localhost:5000/api";
 type ApplicantRole = "student" | "instructor";
 type RequestFilter = "all" | ApplicantRole;
 type Decision = "approve" | "reject";
@@ -84,6 +84,7 @@ export default function AdminDashboard() {
             <span><span className="block text-lg font-extrabold tracking-tight">ExamForge</span><span className="block text-xs font-semibold text-slate-500">Administrator portal</span></span>
           </button>
           <div className="flex items-center gap-2 sm:gap-3">
+            <Link to="/admin/students" className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-700">Student records</Link>
             <Link to="/admin/profile" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-700" aria-label="Open admin profile"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700"><UserRound className="h-4 w-4" /></span><span className="hidden max-w-36 truncate sm:block">{admin?.name || "My profile"}</span></Link>
             <button type="button" onClick={() => void handleLogout()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700" aria-label="Sign out"><LogOut className="h-4 w-4" /><span className="hidden sm:inline">Sign out</span></button>
           </div>

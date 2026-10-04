@@ -32,8 +32,7 @@ import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../redux/hooks";
 
 import { login, logout } from "../redux/slices/authSlice";
-
-const API_URL = "http://localhost:5000/api";
+import { API_URL } from "../apiConfig";
 
 // ======================================================
 // TYPES
@@ -262,9 +261,6 @@ const inputClass =
 
 const iconInputClass =
   "w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-medium text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10";
-
-const selectClass =
-  "h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10";
 
 // ======================================================
 // SMALL COMPONENTS
@@ -1007,37 +1003,6 @@ function StudentProfile() {
   };
 
   // ====================================================
-  // YEAR / SEMESTER
-  // ====================================================
-
-  const handleYearChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const selectedYear = Number(event.target.value);
-    const options = semestersForYear(selectedYear);
-
-    // Selecting a year must also set a valid semester for that year.
-    // This makes the selected Year of Study the exact academic value
-    // that is saved when the user clicks Save Changes.
-    setYearOfStudy(selectedYear);
-    setSemester(options[0]);
-
-    setSuccess("");
-  };
-
-  const handleSemesterChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const selectedSemester = Number(event.target.value);
-
-    // Semester numbers are absolute across the BCA programme:
-    // 1-2 = 1st Year, 3-4 = 2nd Year, 5-6 = 3rd Year.
-    // Keep Year of Study synchronized with the selected semester so
-    // the value sent to the backend is always a valid academic pair.
-    const selectedYear = Math.ceil(selectedSemester / 2);
-
-    setSemester(selectedSemester);
-    setYearOfStudy(selectedYear);
-    setSuccess("");
-  };
-
-  // ====================================================
   // DISCARD / BACK
   // ====================================================
 
@@ -1211,11 +1176,6 @@ function StudentProfile() {
   // ====================================================
   // DERIVED VALUES
   // ====================================================
-
-  // Keep all semester values available in the dropdown.
-  // Selecting a semester automatically synchronizes Year of Study
-  // through handleSemesterChange above.
-  const semesterOptions = [1, 2, 3, 4, 5, 6];
 
   const completion = [
     { label: "Full name", done: Boolean(name.trim()) },
@@ -1537,32 +1497,16 @@ function StudentProfile() {
                     </div>
                   </Field>
 
-                  <Field label="Year of Study" htmlFor="yearOfStudy">
-                    <select
-                      id="yearOfStudy"
-                      value={yearOfStudy}
-                      onChange={handleYearChange}
-                      className={selectClass}
-                    >
-                      <option value={1}>1st Year</option>
-                      <option value={2}>2nd Year</option>
-                      <option value={3}>3rd Year</option>
-                    </select>
+                  <Field label="Year of Study">
+                    <div className="flex h-12 items-center rounded-xl border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-700">
+                      {yearLabelOf(yearOfStudy)}
+                    </div>
                   </Field>
 
-                  <Field label="Semester" htmlFor="semester">
-                    <select
-                      id="semester"
-                      value={semester}
-                      onChange={handleSemesterChange}
-                      className={selectClass}
-                    >
-                      {semesterOptions.map((semesterNumber) => (
-                        <option key={semesterNumber} value={semesterNumber}>
-                          Semester {semesterNumber}
-                        </option>
-                      ))}
-                    </select>
+                  <Field label="Semester">
+                    <div className="flex h-12 items-center rounded-xl border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-700">
+                      Semester {semester}
+                    </div>
                   </Field>
                 </div>
               </section>

@@ -14,8 +14,10 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentProfile from "./pages/StudentProfile";
+import StudentPreferences from "./pages/StudentPreferences";
 import InstructorDashboard from "./pages/InstructorDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminStudents from "./pages/AdminStudents";
 import AdminProfile from "./pages/AdminProfile";
 import InstructorProfile from "./pages/InstructorProfile";
 import ExamPage from "./pages/ExamPage";
@@ -228,6 +230,24 @@ function App() {
           element={
             <ProtectedRoute allowedRole="instructor">
               <InstructorProfile />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/students"
+          element={
+            <ProtectedRoute allowedRole="admin">
+              <AdminStudents />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/student/preferences"
+          element={
+            <ProtectedRoute allowedRole="student">
+              <StudentPreferences />
             </ProtectedRoute>
           }
         />

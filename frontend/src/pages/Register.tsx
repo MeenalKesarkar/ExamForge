@@ -128,10 +128,10 @@ export default function Register() {
     );
 
   const inputClass =
-    "h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#6347ff] focus:bg-white focus:ring-4 focus:ring-[#6347ff]/10 disabled:cursor-not-allowed disabled:opacity-60";
+    "h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#8e5cdb] focus:bg-white focus:ring-4 focus:ring-[#8e5cdb]/10 disabled:cursor-not-allowed disabled:opacity-60";
 
   const selectClass =
-    "h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-[#6347ff] focus:bg-white focus:ring-4 focus:ring-[#6347ff]/10 disabled:cursor-not-allowed disabled:opacity-60";
+    "h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition focus:border-[#8e5cdb] focus:bg-white focus:ring-4 focus:ring-[#8e5cdb]/10 disabled:cursor-not-allowed disabled:opacity-60";
 
   const updateYear = (
     value: number
@@ -476,9 +476,9 @@ export default function Register() {
   };
 
   return (
-    <main className="min-h-screen w-full bg-[#05091f]">
+    <main className="min-h-screen w-full bg-[#130f1c]">
       <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col lg:flex-row">
-        <section className="relative hidden min-h-screen w-full overflow-hidden bg-gradient-to-br from-[#15104f] via-[#24117c] to-[#6d16df] lg:flex lg:w-[46%] xl:w-[48%]">
+        <section className="relative hidden min-h-screen w-full overflow-hidden bg-gradient-to-br from-[#2b174a] via-[#532d87] to-[#8e5cdb] lg:flex lg:w-[46%] xl:w-[48%]">
           <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-purple-500/20 blur-3xl" />
 
           <div className="absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full bg-fuchsia-500/20 blur-3xl" />
@@ -558,25 +558,25 @@ export default function Register() {
                 navigate("/")
               }
               disabled={loading}
-              className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-[#5138ff] disabled:cursor-not-allowed disabled:opacity-60"
+              className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-[#7942c5] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <ArrowLeft className="h-4 w-4" />
 
               Back to login
             </button>
 
-            <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_20px_70px_rgba(17,25,54,0.10)]">
-              <div className="h-1.5 w-full bg-gradient-to-r from-[#4f39ff] via-[#6937ff] to-[#b10cff]" />
+            <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_20px_70px_rgba(24,42,36,0.10)]">
+              <div className="h-1.5 w-full bg-gradient-to-r from-[#7942c5] via-[#8e5cdb] to-[#6534a8]" />
 
               <div className="p-5 sm:p-7 md:p-9 lg:p-10">
-                <div className="mb-6 inline-flex items-center gap-2 rounded-xl bg-[#f0efff] px-3 py-2 text-sm font-semibold text-[#4f39ff]">
+                <div className="mb-6 inline-flex items-center gap-2 rounded-xl bg-[#f5f0ff] px-3 py-2 text-sm font-semibold text-[#7942c5]">
                   <GraduationCap className="h-4 w-4" />
 
                   Create your ExamForge
                   account
                 </div>
 
-                <h2 className="text-3xl font-extrabold tracking-tight text-[#111936] sm:text-[34px]">
+                <h2 className="text-3xl font-extrabold tracking-tight text-[#211a2d] sm:text-[34px]">
                   Join ExamForge 👋
                 </h2>
 
@@ -614,7 +614,7 @@ export default function Register() {
                               "/"
                             )
                           }
-                          className="mt-3 block font-bold text-[#5138ff] underline underline-offset-2 hover:text-[#432bdc]"
+                          className="mt-3 block font-bold text-[#7942c5] underline underline-offset-2 hover:text-[#532d87]"
                         >
                           Go to Login
                         </button>
@@ -657,7 +657,7 @@ export default function Register() {
                             className={`h-12 rounded-xl border text-sm font-bold capitalize transition ${
                               role ===
                               item
-                                ? "border-[#6347ff] bg-[#f0efff] text-[#5138ff] ring-4 ring-[#6347ff]/10"
+                                ? "border-[#8e5cdb] bg-[#f5f0ff] text-[#7942c5] ring-4 ring-[#8e5cdb]/10"
                                 : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300"
                             }`}
                           >
@@ -1046,7 +1046,7 @@ export default function Register() {
                               loading ||
                               registrationSubmitted
                             }
-                            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#5138ff] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#432bdc] disabled:opacity-60"
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#7942c5] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#532d87] disabled:opacity-60"
                           >
                             <Plus className="h-4 w-4" />
 
@@ -1323,7 +1323,7 @@ export default function Register() {
                       loading ||
                       registrationSubmitted
                     }
-                    className="group flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#4c39f5] via-[#6534f7] to-[#a20cff] px-5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition duration-200 hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-70"
+                    className="group flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#6534a8] via-[#8e5cdb] to-[#6534a8] px-5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition duration-200 hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {loading ? (
                       <>
@@ -1432,7 +1432,7 @@ function PasswordField({
           placeholder
         }
         disabled={disabled}
-        className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#6347ff] focus:bg-white focus:ring-4 focus:ring-[#6347ff]/10 disabled:cursor-not-allowed disabled:opacity-60"
+        className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#8e5cdb] focus:bg-white focus:ring-4 focus:ring-[#8e5cdb]/10 disabled:cursor-not-allowed disabled:opacity-60"
       />
 
       <button
