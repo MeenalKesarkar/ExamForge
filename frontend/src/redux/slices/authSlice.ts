@@ -63,12 +63,14 @@ export interface User {
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
+  sessionExpiresAt: number | null;
 }
 
 const initialState:
   AuthState = {
     user: null,
     isAuthenticated: false,
+    sessionExpiresAt: null,
   };
 
 // ======================================================
@@ -90,6 +92,7 @@ const authSlice =
         state,
         action: PayloadAction<{
           user: User;
+          sessionExpiresAt?: number;
         }>
       ) => {
         state.user =
@@ -97,6 +100,11 @@ const authSlice =
 
         state.isAuthenticated =
           true;
+
+        if (action.payload.sessionExpiresAt) {
+          state.sessionExpiresAt =
+            action.payload.sessionExpiresAt;
+        }
       },
 
       // ------------------------------------------------
@@ -128,6 +136,8 @@ const authSlice =
 
         state.isAuthenticated =
           false;
+
+        state.sessionExpiresAt = null;
       },
     },
   });

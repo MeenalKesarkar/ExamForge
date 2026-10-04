@@ -26,8 +26,8 @@ const REFRESH_TOKEN_SECRET =
 const ACCESS_TOKEN_EXPIRES_IN =
   process.env.ACCESS_TOKEN_EXPIRES_IN || "15m";
 
-const REFRESH_TOKEN_EXPIRES_IN =
-  process.env.REFRESH_TOKEN_EXPIRES_IN || "7d";
+const SESSION_LIFETIME_MS =
+  24 * 60 * 60 * 1000;
 
 const OTP_EXPIRY_MINUTES = 10;
 const MAX_OTP_ATTEMPTS = 5;
@@ -50,6 +50,7 @@ type AccountStatus =
 interface TokenPayload extends JwtPayload {
   userId: string;
   role: UserRole;
+  sessionExpiresAt?: number;
 }
 
 // =========================================================
@@ -74,7 +75,8 @@ const baseCookieOptions = {
 
 const createAccessToken = (
   userId: string,
-  role: UserRole
+  role: UserRole,
+  sessionExpiresAt: number
 ) => {
   if (!ACCESS_TOKEN_SECRET) {
     throw new Error(
@@ -86,6 +88,7 @@ const createAccessToken = (
     {
       userId,
       role,
+      sessionExpiresAt,
     },
     ACCESS_TOKEN_SECRET,
     {
@@ -97,7 +100,8 @@ const createAccessToken = (
 
 const createRefreshToken = (
   userId: string,
-  role: UserRole
+  role: UserRole,
+  sessionExpiresAt: number
 ) => {
   if (!REFRESH_TOKEN_SECRET) {
     throw new Error(
@@ -109,11 +113,15 @@ const createRefreshToken = (
     {
       userId,
       role,
+      sessionExpiresAt,
     },
     REFRESH_TOKEN_SECRET,
     {
-      expiresIn:
-        REFRESH_TOKEN_EXPIRES_IN as jwt.SignOptions["expiresIn"],
+      expiresIn: Math.max(
+        1,
+        sessionExpiresAt -
+          Math.floor(Date.now() / 1000)
+      ),
     }
   );
 };
@@ -121,18 +129,32 @@ const createRefreshToken = (
 const setAuthCookies = (
   res: Response,
   userId: string,
-  role: UserRole
-) => {
+  role: UserRole,
+  requestedSessionExpiresAt?: number
+): number => {
+  const now = Math.floor(Date.now() / 1000);
+  const sessionExpiresAt =
+    requestedSessionExpiresAt ??
+    now + SESSION_LIFETIME_MS / 1000;
+  const remainingSeconds =
+    sessionExpiresAt - now;
+
+  if (remainingSeconds <= 0) {
+    throw new Error("Session has expired");
+  }
+
   const accessToken =
     createAccessToken(
       userId,
-      role
+      role,
+      sessionExpiresAt
     );
 
   const refreshToken =
     createRefreshToken(
       userId,
-      role
+      role,
+      sessionExpiresAt
     );
 
   res.cookie(
@@ -140,8 +162,10 @@ const setAuthCookies = (
     accessToken,
     {
       ...baseCookieOptions,
-      maxAge:
+      maxAge: Math.min(
         15 * 60 * 1000,
+        remainingSeconds * 1000
+      ),
     }
   );
 
@@ -151,9 +175,11 @@ const setAuthCookies = (
     {
       ...baseCookieOptions,
       maxAge:
-        7 * 24 * 60 * 60 * 1000,
+        remainingSeconds * 1000,
     }
   );
+
+  return sessionExpiresAt * 1000;
 };
 
 const clearAuthCookies = (
@@ -857,7 +883,7 @@ router.post(
       // Only approved users reach this point.
       // --------------------------------------------------
 
-      setAuthCookies(
+      const sessionExpiresAt = setAuthCookies(
         res,
         user._id.toString(),
         user.role
@@ -869,6 +895,8 @@ router.post(
 
         user:
           sanitizeUser(user),
+
+        sessionExpiresAt,
       });
     } catch (error) {
       console.error(
@@ -938,13 +966,34 @@ router.post(
 
       if (
         !decoded.userId ||
-        !decoded.role
+        !decoded.role ||
+        !decoded.iat ||
+        !decoded.exp
       ) {
         clearAuthCookies(res);
 
         return res.status(401).json({
           message:
             "Invalid refresh session",
+        });
+      }
+
+      const maximumSessionExpiry =
+        decoded.iat +
+        SESSION_LIFETIME_MS / 1000;
+      const sessionExpiresAt = Math.min(
+        decoded.sessionExpiresAt ?? maximumSessionExpiry,
+        maximumSessionExpiry,
+        decoded.exp
+      );
+
+      if (
+        sessionExpiresAt <=
+        Math.floor(Date.now() / 1000)
+      ) {
+        clearAuthCookies(res);
+        return res.status(401).json({
+          message: "Session expired",
         });
       }
 
@@ -1063,17 +1112,13 @@ router.post(
         });
       }
 
-      /*
-       * Rotate both tokens.
-       *
-       * This extends the active session while the
-       * refresh token itself is still valid.
-       */
+      /* Rotate both cookies while preserving the original one-day expiry. */
 
-      setAuthCookies(
+      const sessionExpiry = setAuthCookies(
         res,
         user._id.toString(),
-        user.role
+        user.role,
+        sessionExpiresAt
       );
 
       return res.status(200).json({
@@ -1082,6 +1127,9 @@ router.post(
 
         user:
           sanitizeUser(user),
+
+        sessionExpiresAt:
+          sessionExpiry,
       });
     } catch (error) {
       console.error(

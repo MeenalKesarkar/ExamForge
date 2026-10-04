@@ -175,8 +175,6 @@ function InstructorResults() {
 
   useEffect(() => {
     if (!examId) {
-      setError("Exam ID is missing.");
-      setLoading(false);
       return;
     }
 
@@ -387,15 +385,32 @@ function InstructorResults() {
     };
   }, [attempts]);
 
+  if (!examId) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-slate-900">
+        <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <h1 className="text-xl font-extrabold">Exam ID is missing</h1>
+          <button
+            type="button"
+            onClick={() => navigate("/instructor")}
+            className="mt-5 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-700"
+          >
+            Back to dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
         <div className="text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10">
-            <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50">
+            <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
           </div>
 
-          <p className="mt-4 text-sm text-white/50">
+          <p className="mt-4 text-sm text-slate-500">
             Loading examination results...
           </p>
         </div>
@@ -404,25 +419,25 @@ function InstructorResults() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       {/* Background */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-40 -top-40 h-[28rem] w-[28rem] rounded-full bg-indigo-600/10 blur-3xl" />
+        <div className="absolute -left-40 -top-40 h-[28rem] w-[28rem] rounded-full bg-indigo-600/5 blur-3xl" />
 
-        <div className="absolute right-0 top-1/3 h-[25rem] w-[25rem] rounded-full bg-purple-600/10 blur-3xl" />
+        <div className="absolute right-0 top-1/3 h-[25rem] w-[25rem] rounded-full bg-purple-600/5 blur-3xl" />
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <button
             type="button"
             onClick={() =>
               navigate("/instructor")
             }
-            className="flex items-center gap-3 text-white/70 transition hover:text-white"
+            className="flex items-center gap-3 text-slate-600 transition hover:text-indigo-700"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white">
               <ArrowLeft className="h-5 w-5" />
             </div>
 
@@ -431,16 +446,16 @@ function InstructorResults() {
                 Instructor Dashboard
               </p>
 
-              <p className="text-xs text-white/35">
+              <p className="text-xs text-slate-500">
                 Back to exams
               </p>
             </div>
           </button>
 
           <div className="hidden items-center gap-2 sm:flex">
-            <BarChart3 className="h-4 w-4 text-indigo-400" />
+            <BarChart3 className="h-4 w-4 text-indigo-600" />
 
-            <span className="text-sm text-white/40">
+            <span className="text-sm font-semibold text-slate-600">
               Results
             </span>
           </div>
@@ -449,10 +464,10 @@ function InstructorResults() {
 
       <main className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Hero */}
-        <section className="mb-6 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-indigo-600/20 via-slate-900 to-purple-600/10 p-6 sm:p-8">
+        <section className="mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-700 via-violet-700 to-purple-700 p-6 text-white shadow-xl shadow-indigo-100 sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-400/10 px-3 py-1.5 text-xs font-medium text-indigo-300">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-white">
                 <BarChart3 className="h-3.5 w-3.5" />
 
                 Examination Results
@@ -463,7 +478,7 @@ function InstructorResults() {
                   "Exam Results"}
               </h1>
 
-              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/45">
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-indigo-100">
                 {exam?.subject && (
                   <span>
                     {exam.subject}
@@ -492,8 +507,8 @@ function InstructorResults() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
-              <p className="text-xs text-white/40">
+            <div className="rounded-2xl border border-white/20 bg-white/10 px-5 py-4">
+              <p className="text-xs text-indigo-100">
                 Total Marks
               </p>
 
@@ -507,7 +522,7 @@ function InstructorResults() {
 
         {/* Error */}
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-300">
+          <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
             {error}
           </div>
         )}
@@ -548,10 +563,10 @@ function InstructorResults() {
         </div>
 
         {/* Controls */}
-        <section className="mb-6 rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="relative w-full lg:max-w-md">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
               <input
                 value={search}
@@ -561,7 +576,7 @@ function InstructorResults() {
                   )
                 }
                 placeholder="Search student name or email..."
-                className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-11 pr-4 text-sm outline-none placeholder:text-white/25 focus:border-indigo-500/50"
+                className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
               />
             </div>
 
@@ -600,7 +615,7 @@ function InstructorResults() {
                       statusFilter ===
                       value
                         ? "bg-indigo-600 text-white"
-                        : "bg-white/5 text-white/50 hover:bg-white/10 hover:text-white"
+                        : "border border-slate-200 bg-white text-slate-600 hover:bg-indigo-50 hover:text-indigo-700"
                     }`}
                   >
                     {label}
@@ -612,15 +627,15 @@ function InstructorResults() {
         </section>
 
         {/* Results */}
-        <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
-          <div className="border-b border-white/10 px-5 py-5 sm:px-6">
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="font-semibold">
                   Student Attempts
                 </h2>
 
-                <p className="mt-1 text-xs text-white/35">
+                <p className="mt-1 text-xs text-slate-500">
                   {
                     filteredAttempts.length
                   }{" "}
@@ -638,15 +653,15 @@ function InstructorResults() {
           {filteredAttempts.length ===
           0 ? (
             <div className="px-6 py-20 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5">
-                <FileText className="h-6 w-6 text-white/25" />
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50">
+                <FileText className="h-6 w-6 text-indigo-500" />
               </div>
 
               <h3 className="mt-5 font-semibold">
                 No attempts found
               </h3>
 
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-white/35">
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
                 There are no student attempts
                 matching the current search
                 or filter.
@@ -658,28 +673,28 @@ function InstructorResults() {
               <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[850px]">
                   <thead>
-                    <tr className="border-b border-white/10 text-left">
-                      <th className="px-6 py-4 text-xs font-medium uppercase tracking-wider text-white/30">
+                    <tr className="border-b border-slate-100 bg-slate-50 text-left">
+                      <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
                         Student
                       </th>
 
-                      <th className="px-6 py-4 text-xs font-medium uppercase tracking-wider text-white/30">
+                      <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
                         Score
                       </th>
 
-                      <th className="px-6 py-4 text-xs font-medium uppercase tracking-wider text-white/30">
+                      <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
                         Percentage
                       </th>
 
-                      <th className="px-6 py-4 text-xs font-medium uppercase tracking-wider text-white/30">
+                      <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
                         Status
                       </th>
 
-                      <th className="px-6 py-4 text-xs font-medium uppercase tracking-wider text-white/30">
+                      <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
                         Submitted
                       </th>
 
-                      <th className="px-6 py-4 text-right text-xs font-medium uppercase tracking-wider text-white/30">
+                      <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-slate-500">
                         Action
                       </th>
                     </tr>
@@ -692,11 +707,11 @@ function InstructorResults() {
                           key={
                             attempt._id
                           }
-                          className="border-b border-white/5 last:border-0 hover:bg-white/[0.02]"
+                          className="border-b border-slate-100 last:border-0 hover:bg-indigo-50/30"
                         >
                           <td className="px-6 py-5">
                             <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-sm font-semibold text-indigo-300">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-sm font-bold text-indigo-700">
                                 {getStudentName(
                                   attempt
                                 )
@@ -707,13 +722,13 @@ function InstructorResults() {
                               </div>
 
                               <div>
-                                <p className="text-sm font-medium text-white/85">
+                                <p className="text-sm font-semibold text-slate-900">
                                   {getStudentName(
                                     attempt
                                   )}
                                 </p>
 
-                                <p className="mt-1 text-xs text-white/30">
+                                <p className="mt-1 text-xs text-slate-500">
                                   {getStudentEmail(
                                     attempt
                                   )}
@@ -753,7 +768,7 @@ function InstructorResults() {
                           </td>
 
                           <td className="px-6 py-5">
-                            <div className="flex items-center gap-2 text-xs text-white/40">
+                            <div className="flex items-center gap-2 text-xs text-slate-500">
                               <Clock3 className="h-3.5 w-3.5" />
 
                               {formatDate(
@@ -770,7 +785,7 @@ function InstructorResults() {
                                   `/instructor/attempts/${attempt._id}`
                                 )
                               }
-                              className="rounded-xl bg-white/5 px-4 py-2 text-xs font-medium text-white/70 transition hover:bg-indigo-600 hover:text-white"
+                              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
                             >
                               View Details
                             </button>
@@ -783,7 +798,7 @@ function InstructorResults() {
               </div>
 
               {/* Mobile cards */}
-              <div className="divide-y divide-white/5 md:hidden">
+              <div className="divide-y divide-slate-100 md:hidden">
                 {filteredAttempts.map(
                   (attempt) => (
                     <div
@@ -794,7 +809,7 @@ function InstructorResults() {
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-sm font-semibold text-indigo-300">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-sm font-bold text-indigo-700">
                             {getStudentName(
                               attempt
                             )
@@ -811,7 +826,7 @@ function InstructorResults() {
                               )}
                             </p>
 
-                            <p className="mt-1 truncate text-xs text-white/30">
+                            <p className="mt-1 truncate text-xs text-slate-500">
                               {getStudentEmail(
                                 attempt
                               )}
@@ -850,7 +865,7 @@ function InstructorResults() {
                       </div>
 
                       <div className="mt-4 flex items-center justify-between gap-3">
-                        <span className="text-xs text-white/30">
+                        <span className="text-xs text-slate-500">
                           {formatDate(
                             attempt.submittedAt
                           )}
@@ -890,20 +905,20 @@ function StatCard({
   value: string | number;
 }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
           {icon}
         </div>
 
-        <BarChart3 className="h-4 w-4 text-white/10" />
+        <BarChart3 className="h-4 w-4 text-slate-300" />
       </div>
 
       <p className="mt-5 text-2xl font-bold">
         {value}
       </p>
 
-      <p className="mt-1 text-xs text-white/35">
+      <p className="mt-1 text-xs text-slate-500">
         {label}
       </p>
     </div>
@@ -925,8 +940,8 @@ function StatusBadge({
       <span
         className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-medium ${
           passed
-            ? "bg-emerald-500/10 text-emerald-300"
-            : "bg-red-500/10 text-red-300"
+            ? "bg-emerald-50 text-emerald-700"
+            : "bg-rose-50 text-rose-700"
         }`}
       >
         {passed ? (
@@ -944,7 +959,7 @@ function StatusBadge({
 
   if (status === "TIMED_OUT") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-300">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700">
         <Clock3 className="h-3.5 w-3.5" />
 
         {statusLabel(status)}
@@ -953,7 +968,7 @@ function StatusBadge({
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-medium text-blue-300">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700">
       <Clock3 className="h-3.5 w-3.5" />
 
       {statusLabel(status)}
@@ -969,12 +984,12 @@ function MobileMetric({
   value: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-      <p className="text-[10px] uppercase tracking-wider text-white/25">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[10px] uppercase tracking-wider text-slate-500">
         {label}
       </p>
 
-      <p className="mt-1 text-sm font-semibold text-white/80">
+      <p className="mt-1 text-sm font-semibold text-slate-800">
         {value}
       </p>
     </div>

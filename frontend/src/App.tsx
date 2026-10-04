@@ -1,7 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import { useAppSelector } from "./redux/hooks";
+import { useAppDispatch, useAppSelector } from "./redux/hooks";
+import { login, logout } from "./redux/slices/authSlice";
+import { logoutUser, refreshSession } from "./services/authService";
 import type {
   UserRole,
   AccountStatus,
@@ -22,6 +25,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import QuestionBank from "./pages/QuestionBank";
 import InstructorResults from "./pages/InstructorResults";
 import InstructorAttemptDetails from "./pages/InstructorAttemptDetails";
+import InstructorStudents from "./pages/InstructorStudents";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -32,13 +36,74 @@ function ProtectedRoute({
   children,
   allowedRole,
 }: ProtectedRouteProps) {
-  const { user, isAuthenticated } = useAppSelector(
+  const { user, isAuthenticated, sessionExpiresAt } = useAppSelector(
     (state) => state.auth
   );
+  const dispatch = useAppDispatch();
+  const location = useLocation();
+  const [restoring, setRestoring] = useState(!isAuthenticated);
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      setRestoring(false);
+      return;
+    }
+
+    let active = true;
+    setRestoring(true);
+    void refreshSession()
+      .then((session) => {
+        if (active) {
+          dispatch(login({
+            user: session.user,
+            sessionExpiresAt: session.sessionExpiresAt,
+          }));
+        }
+      })
+      .catch(() => {
+        if (active) dispatch(logout());
+      })
+      .finally(() => {
+        if (active) setRestoring(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [dispatch, isAuthenticated, user]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !sessionExpiresAt) return;
+
+    const remaining = sessionExpiresAt - Date.now();
+    const expireSession = async () => {
+      await logoutUser();
+      dispatch(logout());
+    };
+
+    if (remaining <= 0) {
+      void expireSession();
+      return;
+    }
+
+    const timer = window.setTimeout(
+      () => void expireSession(),
+      remaining
+    );
+    return () => window.clearTimeout(timer);
+  }, [dispatch, isAuthenticated, sessionExpiresAt]);
+
+  if (restoring) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <p className="text-sm text-slate-500">Restoring your secure session...</p>
+      </div>
+    );
+  }
 
   // User is not logged in
   if (!isAuthenticated || !user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/" replace state={{ from: location.pathname }} />;
   }
 
   // User has the wrong role
@@ -162,6 +227,15 @@ function App() {
           element={
             <ProtectedRoute allowedRole="instructor">
               <InstructorProfile />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/instructor/students"
+          element={
+            <ProtectedRoute allowedRole="instructor">
+              <InstructorStudents />
             </ProtectedRoute>
           }
         />

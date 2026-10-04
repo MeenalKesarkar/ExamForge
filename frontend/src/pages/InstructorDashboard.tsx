@@ -580,6 +580,7 @@ function InstructorDashboard() {
 
             <button
               type="button"
+              onClick={() => navigate("/instructor/students")}
               className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 hover:text-indigo-600"
             >
               <Users className="h-4 w-4" />
@@ -708,6 +709,18 @@ function InstructorDashboard() {
                 <Plus className="h-4 w-4" />
 
                 Create Exam
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  navigate("/instructor/students");
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+              >
+                <Users className="h-4 w-4" />
+                Students
               </button>
 
               <button

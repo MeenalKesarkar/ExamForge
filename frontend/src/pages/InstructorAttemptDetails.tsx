@@ -275,13 +275,13 @@ function InstructorAttemptDetails() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10">
             <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
           </div>
 
-          <p className="mt-4 text-sm text-white/50">
+          <p className="mt-4 text-sm text-slate-500">
             Loading attempt details...
           </p>
         </div>
@@ -291,7 +291,7 @@ function InstructorAttemptDetails() {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-slate-950 px-4 py-12 text-white">
+      <div className="min-h-screen bg-slate-50 px-4 py-12 text-slate-900">
         <div className="mx-auto max-w-xl text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10">
             <XCircle className="h-8 w-8 text-red-400" />
@@ -301,7 +301,7 @@ function InstructorAttemptDetails() {
             Unable to load result
           </h1>
 
-          <p className="mt-3 text-sm leading-6 text-white/40">
+          <p className="mt-3 text-sm leading-6 text-slate-500">
             {error ||
               "The requested attempt could not be found."}
           </p>
@@ -334,7 +334,7 @@ function InstructorAttemptDetails() {
       .toUpperCase() || "S";
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       {/* Background */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -left-40 -top-40 h-[28rem] w-[28rem] rounded-full bg-indigo-600/10 blur-3xl" />
@@ -343,7 +343,7 @@ function InstructorAttemptDetails() {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           <button
             type="button"
@@ -352,9 +352,9 @@ function InstructorAttemptDetails() {
                 `/instructor/exams/${exam._id}/results`
               )
             }
-            className="flex items-center gap-3 text-white/70 transition hover:text-white"
+            className="flex items-center gap-3 text-slate-600 transition hover:text-indigo-700"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white">
               <ArrowLeft className="h-5 w-5" />
             </div>
 
@@ -363,16 +363,16 @@ function InstructorAttemptDetails() {
                 Exam Results
               </p>
 
-              <p className="text-xs text-white/35">
+              <p className="text-xs text-slate-500">
                 Back to all attempts
               </p>
             </div>
           </button>
 
           <div className="hidden items-center gap-2 sm:flex">
-            <BarChart3 className="h-4 w-4 text-indigo-400" />
+            <BarChart3 className="h-4 w-4 text-indigo-600" />
 
-            <span className="text-sm text-white/40">
+            <span className="text-sm font-semibold text-slate-600">
               Attempt Details
             </span>
           </div>
@@ -381,10 +381,10 @@ function InstructorAttemptDetails() {
 
       <main className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Hero */}
-        <section className="mb-6 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-indigo-600/20 via-slate-900 to-purple-600/10 p-6 sm:p-8">
+        <section className="mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-700 via-violet-700 to-purple-700 p-6 text-white shadow-xl shadow-indigo-100 sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-400/10 px-3 py-1.5 text-xs font-medium text-indigo-300">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-white">
                 <FileQuestion className="h-3.5 w-3.5" />
                 Student Attempt
               </div>
@@ -393,7 +393,7 @@ function InstructorAttemptDetails() {
                 {exam.title}
               </h1>
 
-              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/45">
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-indigo-100">
                 {exam.subject && (
                   <span>
                     {exam.subject}
@@ -432,10 +432,10 @@ function InstructorAttemptDetails() {
         {/* Student + Score */}
         <div className="mb-6 grid gap-6 lg:grid-cols-[1fr_360px]">
           {/* Student profile */}
-          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10">
-                <User className="h-5 w-5 text-indigo-400" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50">
+                <User className="h-5 w-5 text-indigo-600" />
               </div>
 
               <div>
@@ -443,14 +443,14 @@ function InstructorAttemptDetails() {
                   Student Information
                 </h2>
 
-                <p className="text-xs text-white/35">
+                <p className="text-xs text-slate-500">
                   Student details for this attempt
                 </p>
               </div>
             </div>
 
             <div className="flex flex-col gap-6 sm:flex-row">
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-2xl font-bold text-indigo-300">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-100 to-purple-100 text-2xl font-bold text-indigo-700">
                 {studentInitial}
               </div>
 
@@ -536,16 +536,16 @@ function InstructorAttemptDetails() {
           </section>
 
           {/* Score card */}
-          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wider text-white/30">
+                <p className="text-xs uppercase tracking-wider text-slate-500">
                   Final Score
                 </p>
 
                 <p className="mt-2 text-4xl font-bold">
                   {result.score}
-                  <span className="text-xl text-white/30">
+                  <span className="text-xl text-slate-400">
                     {" "}
                     / {result.totalMarks}
                   </span>
@@ -569,7 +569,7 @@ function InstructorAttemptDetails() {
 
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between text-xs">
-                <span className="text-white/35">
+                <span className="text-slate-500">
                   Percentage
                 </span>
 
@@ -578,7 +578,7 @@ function InstructorAttemptDetails() {
                 </span>
               </div>
 
-              <div className="h-2 overflow-hidden rounded-full bg-white/5">
+              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                 <div
                   className={`h-full rounded-full transition-all ${
                     result.passed
@@ -625,7 +625,7 @@ function InstructorAttemptDetails() {
                   result.unansweredCount
                 }
                 icon={
-                  <FileQuestion className="h-4 w-4 text-white/30" />
+                  <FileQuestion className="h-4 w-4 text-slate-400" />
                 }
               />
             </div>
@@ -633,16 +633,16 @@ function InstructorAttemptDetails() {
         </div>
 
         {/* Attempt metadata */}
-        <section className="mb-6 rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
-            <Clock3 className="h-5 w-5 text-indigo-400" />
+            <Clock3 className="h-5 w-5 text-indigo-600" />
 
             <div>
               <h2 className="font-semibold">
                 Attempt Information
               </h2>
 
-              <p className="text-xs text-white/35">
+              <p className="text-xs text-slate-500">
                 Timing and submission details
               </p>
             </div>
@@ -688,21 +688,21 @@ function InstructorAttemptDetails() {
         </section>
 
         {/* Question analysis */}
-        <section className="rounded-3xl border border-white/10 bg-white/[0.03]">
-          <div className="border-b border-white/10 px-5 py-5 sm:px-6">
+        <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-semibold">
                   Question-wise Analysis
                 </h2>
 
-                <p className="mt-1 text-xs text-white/35">
+                <p className="mt-1 text-xs text-slate-500">
                   Review the student's answers and
                   correct answers.
                 </p>
               </div>
 
-              <span className="rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/40">
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs text-slate-600">
                 {questions.length} Questions
               </span>
             </div>
@@ -710,8 +710,8 @@ function InstructorAttemptDetails() {
 
           <div className="grid lg:grid-cols-[280px_1fr]">
             {/* Question navigation */}
-            <div className="border-b border-white/10 p-4 lg:border-b-0 lg:border-r">
-              <p className="mb-3 px-2 text-xs font-medium uppercase tracking-wider text-white/25">
+            <div className="border-b border-slate-200 p-4 lg:border-b-0 lg:border-r">
+              <p className="mb-3 px-2 text-xs font-medium uppercase tracking-wider text-slate-500">
                 Questions
               </p>
 
@@ -736,10 +736,10 @@ function InstructorAttemptDetails() {
                         question._id
                           ? "bg-indigo-600 text-white shadow-lg shadow-indigo-950/30"
                           : question.isCorrect
-                            ? "bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                              ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                             : question.isAnswered
-                              ? "bg-red-500/10 text-red-300 hover:bg-red-500/20"
-                              : "bg-white/5 text-white/35 hover:bg-white/10"
+                              ? "bg-red-50 text-red-700 hover:bg-red-100"
+                              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                       }`}
                     >
                       {index + 1}
@@ -750,7 +750,7 @@ function InstructorAttemptDetails() {
                             ? "bg-emerald-400"
                             : question.isAnswered
                               ? "bg-red-400"
-                              : "bg-white/20"
+                            : "bg-slate-300"
                         }`}
                       />
                     </button>
@@ -758,7 +758,7 @@ function InstructorAttemptDetails() {
                 )}
               </div>
 
-              <div className="mt-5 space-y-2 border-t border-white/5 pt-5">
+              <div className="mt-5 space-y-2 border-t border-slate-100 pt-5">
                 <Legend
                   className="bg-emerald-500"
                   label="Correct"
@@ -770,7 +770,7 @@ function InstructorAttemptDetails() {
                 />
 
                 <Legend
-                  className="bg-white/20"
+                  className="bg-slate-300"
                   label="Unanswered"
                 />
               </div>
@@ -785,7 +785,7 @@ function InstructorAttemptDetails() {
                   }
                 />
               ) : (
-                <div className="py-16 text-center text-sm text-white/35">
+                <div className="py-16 text-center text-sm text-slate-500">
                   Select a question to view
                   its details.
                 </div>
@@ -815,10 +815,10 @@ function QuestionAnalysis({
             <span
               className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
                 question.isCorrect
-                  ? "bg-emerald-500/10 text-emerald-300"
-                  : question.isAnswered
-                    ? "bg-red-500/10 text-red-300"
-                    : "bg-white/5 text-white/35"
+                  ? "bg-emerald-50 text-emerald-700"
+                    : question.isAnswered
+                    ? "bg-red-50 text-red-700"
+                    : "bg-slate-100 text-slate-500"
               }`}
             >
               {question.isCorrect
@@ -828,14 +828,14 @@ function QuestionAnalysis({
                   : "Unanswered"}
             </span>
 
-            <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-white/35">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-600">
               {question.type ===
               "multi"
                 ? "Multiple Choice"
                 : "Single Choice"}
             </span>
 
-            <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-white/35">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-600">
               {question.marks}{" "}
               {question.marks ===
               1
@@ -843,12 +843,12 @@ function QuestionAnalysis({
                 : "marks"}
             </span>
 
-            <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] capitalize text-white/35">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] capitalize text-slate-600">
               {question.difficulty}
             </span>
           </div>
 
-          <h3 className="text-lg font-semibold leading-7 text-white/90">
+          <h3 className="text-lg font-semibold leading-7 text-slate-900">
             {question.questionText}
           </h3>
         </div>
@@ -868,14 +868,14 @@ function QuestionAnalysis({
               );
 
             let optionClass =
-              "border-white/10 bg-white/[0.02]";
+              "border-slate-200 bg-white";
 
             if (isCorrect) {
-              optionClass =
-                "border-emerald-500/30 bg-emerald-500/10";
+                optionClass =
+                  "border-emerald-200 bg-emerald-50";
             } else if (isSelected) {
-              optionClass =
-                "border-red-500/30 bg-red-500/10";
+                optionClass =
+                  "border-red-200 bg-red-50";
             }
 
             return (
@@ -887,10 +887,10 @@ function QuestionAnalysis({
                   <div
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold ${
                       isCorrect
-                        ? "bg-emerald-500/20 text-emerald-300"
+                        ? "bg-emerald-100 text-emerald-700"
                         : isSelected
-                          ? "bg-red-500/20 text-red-300"
-                          : "bg-white/5 text-white/35"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-slate-100 text-slate-500"
                     }`}
                   >
                     {String.fromCharCode(
@@ -899,19 +899,19 @@ function QuestionAnalysis({
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm leading-6 text-white/75">
+                    <p className="text-sm leading-6 text-slate-700">
                       {option}
                     </p>
 
                     <div className="mt-2 flex flex-wrap gap-2">
                       {isSelected && (
-                        <span className="rounded-full bg-indigo-500/10 px-2 py-1 text-[10px] font-medium text-indigo-300">
+                        <span className="rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-medium text-indigo-700">
                           Student selected
                         </span>
                       )}
 
                       {isCorrect && (
-                        <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
+                        <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700">
                           Correct answer
                         </span>
                       )}
@@ -931,16 +931,16 @@ function QuestionAnalysis({
       </div>
 
       {!question.isAnswered && (
-        <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-start gap-3">
-            <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+            <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
 
             <div>
-              <p className="text-sm font-medium text-amber-300">
+              <p className="text-sm font-medium text-amber-900">
                 Question was unanswered
               </p>
 
-              <p className="mt-1 text-xs leading-5 text-amber-200/50">
+              <p className="mt-1 text-xs leading-5 text-amber-800">
                 The student did not select an answer
                 for this question.
               </p>
@@ -950,12 +950,12 @@ function QuestionAnalysis({
       )}
 
       {question.explanation && (
-        <div className="mt-5 rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.06] p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-indigo-300">
+        <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
             Explanation
           </p>
 
-          <p className="mt-2 text-sm leading-6 text-white/55">
+          <p className="mt-2 text-sm leading-6 text-slate-700">
             {question.explanation}
           </p>
         </div>
@@ -978,17 +978,17 @@ function InfoItem({
   value: string;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
-      <div className="mt-0.5 text-white/25">
+    <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="mt-0.5 text-slate-400">
         {icon}
       </div>
 
       <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wider text-white/25">
+        <p className="text-[10px] uppercase tracking-wider text-slate-500">
           {label}
         </p>
 
-        <p className="mt-1 truncate text-sm text-white/70">
+        <p className="mt-1 truncate text-sm text-slate-700">
           {value}
         </p>
       </div>
@@ -1006,11 +1006,11 @@ function ResultMetric({
   value: number;
 }) {
   return (
-    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
       <div className="flex items-center gap-1.5">
         {icon}
 
-        <span className="text-[10px] uppercase tracking-wider text-white/25">
+        <span className="text-[10px] uppercase tracking-wider text-slate-500">
           {label}
         </span>
       </div>
@@ -1030,12 +1030,12 @@ function MetaCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
-      <p className="text-[10px] uppercase tracking-wider text-white/25">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-[10px] uppercase tracking-wider text-slate-500">
         {label}
       </p>
 
-      <p className="mt-2 text-sm font-medium leading-5 text-white/70">
+      <p className="mt-2 text-sm font-medium leading-5 text-slate-700">
         {value}
       </p>
     </div>
@@ -1050,7 +1050,7 @@ function Legend({
   label: string;
 }) {
   return (
-    <div className="flex items-center gap-2 px-2 text-xs text-white/35">
+    <div className="flex items-center gap-2 px-2 text-xs text-slate-500">
       <span
         className={`h-2 w-2 rounded-full ${className}`}
       />
@@ -1075,8 +1075,8 @@ function StatusBadge({
       <span
         className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium ${
           passed
-            ? "bg-emerald-500/10 text-emerald-300"
-            : "bg-red-500/10 text-red-300"
+            ? "bg-emerald-50 text-emerald-700"
+            : "bg-red-50 text-red-700"
         }`}
       >
         {passed ? (
@@ -1094,7 +1094,7 @@ function StatusBadge({
 
   if (status === "TIMED_OUT") {
     return (
-      <span className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300">
+      <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
         <Clock3 className="h-4 w-4" />
         Timed Out
       </span>
@@ -1102,7 +1102,7 @@ function StatusBadge({
   }
 
   return (
-    <span className="inline-flex items-center gap-2 rounded-full bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300">
+    <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
       <Clock3 className="h-4 w-4" />
       In Progress
     </span>

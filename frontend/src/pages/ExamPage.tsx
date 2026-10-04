@@ -701,7 +701,7 @@ function ExamPage() {
             },
             body: JSON.stringify({
               questionId,
-              selectedAnswers,
+              answers: selectedAnswers,
             }),
           }
         );
@@ -1103,11 +1103,11 @@ function ExamPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
         <div className="text-center">
-          <Loader2 className="mx-auto h-10 w-10 animate-spin text-indigo-400" />
+          <Loader2 className="mx-auto h-10 w-10 animate-spin text-indigo-600" />
 
-          <p className="mt-4 text-sm text-white/50">
+          <p className="mt-4 text-sm text-slate-500">
             Loading your exam...
           </p>
         </div>
@@ -1123,12 +1123,12 @@ function ExamPage() {
     submittedStatus
   ) {
     return (
-      <div className="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
-        <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-slate-900 text-white shadow-2xl">
-          <div className="border-b border-white/10 bg-gradient-to-r from-indigo-500/20 via-purple-500/10 to-transparent px-6 py-8 text-center">
-            <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-400" />
+      <div className="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm">
+        <div className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-purple-50 to-white px-6 py-8 text-center">
+            <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-600" />
 
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-300">
+            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-700">
               Exam Submitted
             </p>
 
@@ -1138,22 +1138,22 @@ function ExamPage() {
           </div>
 
           <div className="px-6 py-7 text-center">
-            <p className="text-sm leading-6 text-white/60">
+            <p className="text-sm leading-6 text-slate-600">
               {submittedStatus === "TIMED_OUT"
                 ? "Your exam time has ended and your answers have been submitted automatically."
                 : "Your answers have been submitted successfully."}
             </p>
 
-            <div className="mt-5 rounded-2xl border border-indigo-400/20 bg-indigo-500/10 px-5 py-4">
-              <p className="text-sm font-semibold text-indigo-200">
+            <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 px-5 py-4">
+              <p className="text-sm font-semibold text-indigo-800">
                 Results will be announced soon.
               </p>
-              <p className="mt-1 text-xs leading-5 text-white/45">
+              <p className="mt-1 text-xs leading-5 text-slate-600">
                 Your score will be displayed after the exam deadline.
               </p>
             </div>
 
-            <p className="mt-4 text-xs text-white/35">
+            <p className="mt-4 text-xs text-slate-500">
               This page will automatically check for your result.
             </p>
 
@@ -1162,7 +1162,7 @@ function ExamPage() {
               onClick={() =>
                 navigate("/student")
               }
-              className="mt-6 w-full rounded-2xl bg-indigo-500 px-6 py-3.5 font-semibold text-white transition hover:bg-indigo-400"
+              className="mt-6 w-full rounded-2xl bg-indigo-600 px-6 py-3.5 font-semibold text-white transition hover:bg-indigo-700"
             >
               Back to Dashboard
             </button>
@@ -1181,20 +1181,20 @@ function ExamPage() {
     result
   ) {
     return (
-      <div className="min-h-screen bg-slate-950 px-4 py-10 text-white">
+      <div className="min-h-screen bg-slate-50 px-4 py-10 text-slate-900">
         <div className="mx-auto max-w-4xl">
 
-          <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] shadow-2xl">
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
 
-            <div className="border-b border-white/10 bg-gradient-to-r from-indigo-500/20 via-purple-500/10 to-transparent px-6 py-10 text-center sm:px-10">
+            <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-purple-50 to-white px-6 py-10 text-center sm:px-10">
 
               {result.passed ? (
-                <CheckCircle2 className="mx-auto h-16 w-16 text-emerald-400" />
+                <CheckCircle2 className="mx-auto h-16 w-16 text-emerald-600" />
               ) : (
-                <AlertCircle className="mx-auto h-16 w-16 text-amber-400" />
+                <AlertCircle className="mx-auto h-16 w-16 text-amber-600" />
               )}
 
-              <p className="mt-5 text-sm font-medium uppercase tracking-[0.2em] text-white/40">
+              <p className="mt-5 text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
                 {submittedStatus ===
                 "TIMED_OUT"
                   ? "Time Expired"
@@ -1206,7 +1206,7 @@ function ExamPage() {
                   "Exam Result"}
               </h1>
 
-              <p className="mt-2 text-white/50">
+              <p className="mt-2 text-slate-500">
                 {exam?.subject ||
                   "Assessment Result"}
               </p>
@@ -1215,14 +1215,14 @@ function ExamPage() {
 
             <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4">
 
-              <div className="rounded-2xl bg-white/[0.04] p-5">
-                <p className="text-sm text-white/40">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-sm text-slate-500">
                   Score
                 </p>
 
                 <p className="mt-2 text-3xl font-bold">
                   {result.score}
-                  <span className="text-lg text-white/30">
+                  <span className="text-lg text-slate-400">
                     {" "}
                     /{" "}
                     {result.totalMarks}
@@ -1230,8 +1230,8 @@ function ExamPage() {
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-white/[0.04] p-5">
-                <p className="text-sm text-white/40">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-sm text-slate-500">
                   Percentage
                 </p>
 
@@ -1240,22 +1240,22 @@ function ExamPage() {
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-white/[0.04] p-5">
-                <p className="text-sm text-white/40">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-sm text-slate-500">
                   Correct
                 </p>
 
-                <p className="mt-2 text-3xl font-bold text-emerald-400">
+                <p className="mt-2 text-3xl font-bold text-emerald-600">
                   {result.correctCount}
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-white/[0.04] p-5">
-                <p className="text-sm text-white/40">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-sm text-slate-500">
                   Incorrect
                 </p>
 
-                <p className="mt-2 text-3xl font-bold text-red-400">
+                <p className="mt-2 text-3xl font-bold text-rose-600">
                   {result.incorrectCount}
                 </p>
               </div>
@@ -1264,8 +1264,8 @@ function ExamPage() {
 
             <div className="grid gap-4 px-6 pb-6 sm:grid-cols-3">
 
-              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
-                <p className="text-sm text-white/40">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <p className="text-sm text-slate-500">
                   Answered
                 </p>
 
@@ -1274,8 +1274,8 @@ function ExamPage() {
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
-                <p className="text-sm text-white/40">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <p className="text-sm text-slate-500">
                   Unanswered
                 </p>
 
@@ -1284,8 +1284,8 @@ function ExamPage() {
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
-                <p className="text-sm text-white/40">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <p className="text-sm text-slate-500">
                   Passing Marks
                 </p>
 
@@ -1296,7 +1296,7 @@ function ExamPage() {
 
             </div>
 
-            <div className="border-t border-white/10 p-6">
+            <div className="border-t border-slate-100 p-6">
               <button
                 type="button"
                 onClick={() =>
@@ -1304,7 +1304,7 @@ function ExamPage() {
                     "/student"
                   )
                 }
-                className="w-full rounded-2xl bg-indigo-500 px-6 py-3.5 font-semibold text-white transition hover:bg-indigo-400"
+                className="w-full rounded-2xl bg-indigo-600 px-6 py-3.5 font-semibold text-white transition hover:bg-indigo-700"
               >
                 Back to Dashboard
               </button>
@@ -1327,16 +1327,16 @@ function ExamPage() {
     !currentQuestion
   ) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-white">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-slate-900">
         <div className="max-w-md text-center">
 
-          <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
+          <AlertCircle className="mx-auto h-12 w-12 text-rose-600" />
 
           <h1 className="mt-5 text-2xl font-bold">
             Unable to load exam
           </h1>
 
-          <p className="mt-2 text-white/50">
+          <p className="mt-2 text-slate-500">
             {error ||
               "This exam attempt could not be loaded."}
           </p>
@@ -1348,7 +1348,7 @@ function ExamPage() {
                 "/student"
               )
             }
-            className="mt-6 rounded-xl bg-indigo-500 px-5 py-3 font-semibold hover:bg-indigo-400"
+            className="mt-6 rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-700"
           >
             Back to Dashboard
           </button>
@@ -1363,18 +1363,18 @@ function ExamPage() {
   ======================================================= */
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
 
       {/* =================================================
           TOP HEADER
       ================================================= */}
 
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/95 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-xl">
 
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
 
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-indigo-400">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">
               ExamForge
             </p>
 
@@ -1382,7 +1382,7 @@ function ExamPage() {
               {exam.title}
             </h1>
 
-            <p className="hidden text-xs text-white/40 sm:block">
+            <p className="hidden text-xs text-slate-500 sm:block">
               {exam.subject ||
                 "Online Assessment"}
             </p>
@@ -1391,10 +1391,10 @@ function ExamPage() {
           <div
             className={`flex items-center gap-2 rounded-2xl border px-4 py-2.5 ${
               isCriticalTime
-                ? "border-red-500/40 bg-red-500/10 text-red-300"
+                ? "border-rose-200 bg-rose-50 text-rose-700"
                 : isLowTime
-                ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
-                : "border-white/10 bg-white/[0.04] text-white"
+                ? "border-amber-200 bg-amber-50 text-amber-700"
+                : "border-slate-200 bg-white text-slate-800"
             }`}
           >
             <Clock3 className="h-5 w-5" />
@@ -1415,9 +1415,9 @@ function ExamPage() {
         </div>
 
         {/* Progress */}
-        <div className="h-1 bg-white/5">
+        <div className="h-1 bg-slate-200">
           <div
-            className="h-full bg-indigo-500 transition-all"
+            className="h-full bg-indigo-600 transition-all"
             style={{
               width: `${progress}%`,
             }}
@@ -1432,7 +1432,7 @@ function ExamPage() {
 
       {error && (
         <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6">
-          <div className="flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
 
             <span>
@@ -1456,7 +1456,7 @@ function ExamPage() {
 
           <section>
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-xl sm:p-8">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
 
               {/* Question Header */}
 
@@ -1466,14 +1466,14 @@ function ExamPage() {
 
                   <div className="flex flex-wrap items-center gap-2">
 
-                    <span className="rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-300">
+                    <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
                       Question{" "}
                       {currentIndex + 1}{" "}
                       /{" "}
                       {questions.length}
                     </span>
 
-                    <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/50">
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
                       {currentQuestion.marks}{" "}
                       {currentQuestion.marks ===
                       1
@@ -1484,7 +1484,7 @@ function ExamPage() {
                     {currentQuestion
                       .type ===
                       "multi" && (
-                      <span className="rounded-full bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-300">
+                      <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
                         Select all that apply
                       </span>
                     )}
@@ -1510,8 +1510,8 @@ function ExamPage() {
                     flaggedQuestions.has(
                       currentQuestion._id
                     )
-                      ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
-                      : "border-white/10 bg-white/[0.03] text-white/40 hover:text-white"
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-slate-200 bg-white text-slate-500 hover:text-slate-900"
                   }`}
                   title={
                     flaggedQuestions.has(
@@ -1548,8 +1548,8 @@ function ExamPage() {
                         htmlFor={inputId}
                         className={`group flex cursor-pointer items-center gap-4 rounded-2xl border p-4 transition ${
                           selected
-                            ? "border-indigo-400/50 bg-indigo-500/10"
-                            : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]"
+                            ? "border-indigo-300 bg-indigo-50"
+                            : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/50"
                         }`}
                       >
 
@@ -1577,8 +1577,8 @@ function ExamPage() {
                         <span
                           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold ${
                             selected
-                              ? "border-indigo-400 bg-indigo-500 text-white"
-                              : "border-white/10 bg-white/5 text-white/50"
+                              ? "border-indigo-600 bg-indigo-600 text-white"
+                              : "border-slate-200 bg-slate-50 text-slate-500"
                           }`}
                         >
                           {String.fromCharCode(
@@ -1590,15 +1590,15 @@ function ExamPage() {
                         <span
                           className={`flex-1 text-sm leading-6 sm:text-base ${
                             selected
-                              ? "text-white"
-                              : "text-white/70"
+                              ? "text-slate-900"
+                              : "text-slate-700"
                           }`}
                         >
                           {option}
                         </span>
 
                         {selected && (
-                          <CheckCircle2 className="h-5 w-5 shrink-0 text-indigo-400" />
+                          <CheckCircle2 className="h-5 w-5 shrink-0 text-indigo-600" />
                         )}
 
                       </label>
@@ -1610,7 +1610,7 @@ function ExamPage() {
 
               {/* Save status */}
 
-              <div className="mt-5 flex min-h-5 items-center justify-end text-xs text-white/35">
+              <div className="mt-5 flex min-h-5 items-center justify-end text-xs text-slate-500">
 
                 {savingQuestionId ===
                   currentQuestion._id && (
@@ -1624,7 +1624,7 @@ function ExamPage() {
 
               {/* Navigation */}
 
-              <div className="mt-6 flex items-center justify-between gap-3 border-t border-white/10 pt-6">
+              <div className="mt-6 flex items-center justify-between gap-3 border-t border-slate-200 pt-6">
 
                 <button
                   type="button"
@@ -1641,7 +1641,7 @@ function ExamPage() {
                         )
                     )
                   }
-                  className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-semibold text-white/70 transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-30"
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Previous
@@ -1662,7 +1662,7 @@ function ExamPage() {
                           )
                       )
                     }
-                    className="flex items-center gap-2 rounded-xl bg-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-400"
+                    className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
                   >
                     Next
                     <ChevronRight className="h-4 w-4" />
@@ -1678,7 +1678,7 @@ function ExamPage() {
                         false
                       )
                     }
-                    className="flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {submitting ? (
                       <>
@@ -1708,7 +1708,7 @@ function ExamPage() {
 
             {/* Summary */}
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 
               <div className="flex items-center justify-between">
 
@@ -1716,13 +1716,13 @@ function ExamPage() {
                   Exam Progress
                 </h3>
 
-                <span className="text-sm text-white/40">
+                <span className="text-sm text-slate-500">
                   {progress}%
                 </span>
 
               </div>
 
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/5">
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
                 <div
                   className="h-full rounded-full bg-indigo-500 transition-all"
                   style={{
@@ -1733,18 +1733,18 @@ function ExamPage() {
 
               <div className="mt-5 grid grid-cols-2 gap-3">
 
-                <div className="rounded-2xl bg-white/[0.03] p-3">
-                  <p className="text-xs text-white/40">
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">
                     Answered
                   </p>
 
-                  <p className="mt-1 text-xl font-bold text-emerald-400">
+                  <p className="mt-1 text-xl font-bold text-emerald-600">
                     {answeredCount}
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-white/[0.03] p-3">
-                  <p className="text-xs text-white/40">
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">
                     Remaining
                   </p>
 
@@ -1755,12 +1755,12 @@ function ExamPage() {
 
               </div>
 
-              <div className="mt-3 rounded-2xl bg-white/[0.03] p-3">
-                <p className="text-xs text-white/40">
+              <div className="mt-3 rounded-2xl bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">
                   Flagged
                 </p>
 
-                <p className="mt-1 text-xl font-bold text-amber-300">
+                <p className="mt-1 text-xl font-bold text-amber-600">
                   {flaggedCount}
                 </p>
               </div>
@@ -1769,7 +1769,7 @@ function ExamPage() {
 
             {/* Question Navigator */}
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 
               <h3 className="font-semibold">
                 Questions
@@ -1812,10 +1812,10 @@ function ExamPage() {
                         }
                         className={`relative flex h-10 items-center justify-center rounded-xl text-xs font-semibold transition ${
                           active
-                            ? "bg-indigo-500 text-white ring-2 ring-indigo-300/30"
+                            ? "bg-indigo-600 text-white ring-2 ring-indigo-300/30"
                             : answered
                             ? "bg-emerald-500/15 text-emerald-300"
-                            : "bg-white/5 text-white/40 hover:bg-white/10 hover:text-white"
+                            : "bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-700"
                         }`}
                       >
                         {index + 1}
@@ -1838,7 +1838,7 @@ function ExamPage() {
             {exam.instructions &&
               exam.instructions.length >
                 0 && (
-                <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 
                   <h3 className="font-semibold">
                     Instructions
@@ -1855,9 +1855,9 @@ function ExamPage() {
                           key={
                             `${instruction}-${index}`
                           }
-                          className="flex gap-2 text-xs leading-5 text-white/50"
+                          className="flex gap-2 text-xs leading-5 text-slate-600"
                         >
-                          <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-indigo-400" />
+                          <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-indigo-600" />
 
                           <span>
                             {instruction}
@@ -1883,7 +1883,7 @@ function ExamPage() {
                   false
                 )
               }
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-3.5 text-sm font-semibold text-red-300 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-3.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? (
                 <>

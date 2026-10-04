@@ -1,6 +1,8 @@
 import { Router, Response } from "express";
 
-import User from "../models/User";
+import User, { type TeachingAssignment } from "../models/User";
+import Exam from "../models/Exam";
+import Attempt from "../models/Attempt";
 import {
   requireAuth,
   AuthenticatedRequest,
@@ -584,6 +586,139 @@ router.put(
       return res.status(500).json({
         message:
           "Failed to update your profile",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   INSTRUCTOR STUDENT DIRECTORY
+   GET /api/profile/instructor/students
+========================================================= */
+
+router.get(
+  "/instructor/students",
+  requireAuth,
+  async (
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    try {
+      if (!req.user || req.user.role !== "instructor") {
+        return res.status(403).json({
+          message: "Instructor access required",
+        });
+      }
+
+      const instructor = await User.findById(req.user.userId)
+        .select("teachingAssignments isActive");
+
+      if (!instructor) {
+        return res.status(404).json({
+          message: "Instructor not found",
+        });
+      }
+
+      if (!instructor.isActive) {
+        return res.status(403).json({
+          message: "Your account has been disabled",
+        });
+      }
+
+      const assignments: TeachingAssignment[] = instructor.teachingAssignments || [];
+      const studentGroups = assignments.flatMap((assignment) => {
+        if (
+          !assignment.degree ||
+          !assignment.yearOfStudy ||
+          assignment.semesters.length === 0 ||
+          assignment.classSections.length === 0
+        ) {
+          return [];
+        }
+
+        return [{
+          degree: assignment.degree,
+          yearOfStudy: assignment.yearOfStudy,
+          semester: { $in: assignment.semesters },
+          classSection: { $in: assignment.classSections },
+        }];
+      });
+
+      if (studentGroups.length === 0) {
+        return res.status(200).json({ students: [] });
+      }
+
+      const students = await User.find({
+        role: "student",
+        accountStatus: "approved",
+        $or: studentGroups,
+      })
+        .select("name email studentId degree yearOfStudy semester classSection isActive")
+        .sort({ yearOfStudy: 1, semester: 1, name: 1 });
+
+      const exams = await Exam.find({
+        createdBy: instructor._id,
+        published: true,
+      }).select("_id degree yearOfStudy semester");
+
+      const attempts = exams.length && students.length
+        ? await Attempt.find({
+            examId: { $in: exams.map((exam) => exam._id) },
+            studentId: { $in: students.map((student) => student._id) },
+          }).select("studentId examId status")
+        : [];
+
+      const responseStudents = students.map((student) => {
+        const eligibleExamIds = new Set(
+          exams
+            .filter((exam) =>
+              (!exam.degree || exam.degree.trim().toLowerCase() === (student.degree || "").trim().toLowerCase()) &&
+              (!exam.yearOfStudy || exam.yearOfStudy === student.yearOfStudy) &&
+              (!exam.semester || exam.semester === student.semester)
+            )
+            .map((exam) => exam._id.toString())
+        );
+
+        const studentAttempts = attempts.filter(
+          (attempt) =>
+            attempt.studentId.toString() === student._id.toString() &&
+            eligibleExamIds.has(attempt.examId.toString())
+        );
+
+        const attendedExamIds = new Set(
+          studentAttempts
+            .filter((attempt) => attempt.status !== "IN_PROGRESS")
+            .map((attempt) => attempt.examId.toString())
+        );
+
+        const inProgressExamIds = new Set(
+          studentAttempts
+            .filter((attempt) => attempt.status === "IN_PROGRESS")
+            .map((attempt) => attempt.examId.toString())
+        );
+
+        return {
+          _id: student._id,
+          name: student.name,
+          email: student.email,
+          studentId: student.studentId,
+          degree: student.degree,
+          yearOfStudy: student.yearOfStudy,
+          semester: student.semester,
+          classSection: student.classSection,
+          isActive: student.isActive,
+          eligibleExamCount: eligibleExamIds.size,
+          attemptCount: studentAttempts.length,
+          attendedExamCount: attendedExamIds.size,
+          inProgressExamCount: inProgressExamIds.size,
+        };
+      });
+
+      return res.status(200).json({ students: responseStudents });
+    } catch (error) {
+      console.error("Get instructor students error:", error);
+      return res.status(500).json({
+        message: "Failed to fetch students",
       });
     }
   }

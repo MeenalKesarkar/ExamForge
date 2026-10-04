@@ -90,6 +90,7 @@ export interface AuthUser {
 export interface LoginResponse {
   message: string;
   user: AuthUser;
+  sessionExpiresAt: number;
   rememberMe?: boolean;
 }
 
@@ -101,6 +102,7 @@ export interface RegisterResponse {
 export interface RefreshResponse {
   message: string;
   user: AuthUser;
+  sessionExpiresAt: number;
 }
 
 export interface ForgotPasswordResponse {

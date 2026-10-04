@@ -1400,27 +1400,6 @@ router.get(
         return;
       }
 
-      const now = new Date();
-
-      if (!areResultsAvailable(exam, now)) {
-        return res.status(200).json({
-          exam: {
-            _id: exam._id,
-            title: exam.title,
-            subject: exam.subject,
-            degree: exam.degree,
-            yearOfStudy: exam.yearOfStudy,
-            semester: exam.semester,
-            duration: exam.duration,
-            questionCount: exam.questionCount,
-            totalMarks: exam.totalMarks,
-            passingMarks: exam.passingMarks,
-          },
-          resultsAvailable: false,
-          attempts: [],
-        });
-      }
-
       /*
        * First close all attempts whose
        * server-side time has expired.
@@ -1603,15 +1582,6 @@ router.get(
         return;
       }
 
-      const now = new Date();
-
-      if (!areResultsAvailable(exam, now)) {
-        return res.status(200).json({
-          attempts: [],
-          resultsAvailable: false,
-        });
-      }
-
       const attempts =
         await Attempt.find({
           examId: exam._id,
@@ -1752,39 +1722,6 @@ router.get(
         });
       }
 
-      const now = new Date();
-
-      if (!areResultsAvailable(exam, now)) {
-        return res.status(200).json({
-          attempt: {
-            _id: attempt._id,
-            status: attempt.status,
-            startTime: attempt.startTime,
-            endTime: attempt.endTime,
-            submittedAt: attempt.submittedAt,
-            tabSwitchCount: attempt.tabSwitchCount,
-          },
-          student: attempt.studentId,
-          exam: {
-            _id: exam._id,
-            title: exam.title,
-            subject: exam.subject,
-            degree: exam.degree,
-            yearOfStudy: exam.yearOfStudy,
-            semester: exam.semester,
-            duration: exam.duration,
-            questionCount: exam.questionCount,
-            totalMarks: exam.totalMarks,
-            passingMarks: exam.passingMarks,
-            negativeMarking: exam.negativeMarking,
-            negativePenalty: exam.negativePenalty,
-          },
-          result: null,
-          questions: [],
-          resultsAvailable: false,
-        });
-      }
-
       await closeExpiredAttempt(
         attempt,
         exam
@@ -1887,6 +1824,9 @@ router.get(
                 isCorrect:
                   correct,
 
+                isAnswered:
+                  selectedAnswers.length > 0,
+
                 isUnanswered:
                   unanswered,
               };
@@ -1907,6 +1847,7 @@ router.get(
                     difficulty: string;
                     explanation?: string;
                     isCorrect: boolean;
+                    isAnswered: boolean;
                     isUnanswered: boolean;
                   }
                 | null

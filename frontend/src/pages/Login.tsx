@@ -191,6 +191,7 @@ export default function Login() {
         dispatch(
           login({
             user: result.user,
+            sessionExpiresAt: result.sessionExpiresAt,
           })
         );
 
@@ -207,6 +208,7 @@ export default function Login() {
         dispatch(
           login({
             user: result.user,
+            sessionExpiresAt: result.sessionExpiresAt,
           })
         );
 
@@ -220,6 +222,7 @@ export default function Login() {
         dispatch(
           login({
             user: result.user,
+            sessionExpiresAt: result.sessionExpiresAt,
           })
         );
 
