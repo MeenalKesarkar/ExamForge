@@ -21,6 +21,7 @@ export interface AttemptData {
   submittedAt?: string | null;
   status: "IN_PROGRESS" | "SUBMITTED" | "EVALUATED" | "TIMED_OUT";
   tabSwitchCount?: number;
+  proctoringDisqualified?: boolean;
   score?: number;
   totalMarks?: number;
   percentage?: number;

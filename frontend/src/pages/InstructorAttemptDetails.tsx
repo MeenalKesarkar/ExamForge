@@ -424,7 +424,7 @@ function InstructorAttemptDetails() {
 
             <StatusBadge
               status={attempt.status}
-              passed={attempt.passed}
+              passed={result.passed}
             />
           </div>
         </section>

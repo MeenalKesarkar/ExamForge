@@ -7,6 +7,7 @@ import type { ExamData, ExamResult } from "../types";
 
 interface ExamStateScreensProps {
   submittedStatus?: "SUBMITTED" | "TIMED_OUT" | "EVALUATED" | null;
+  proctoringDisqualified?: boolean;
   result?: ExamResult | null;
   exam?: ExamData | null;
   error?: string;
@@ -24,18 +25,26 @@ export function ExamLoadingScreen() {
   );
 }
 
-export function ExamSubmittedScreen({ submittedStatus, onBack }: ExamStateScreensProps) {
+export function ExamSubmittedScreen({ submittedStatus, proctoringDisqualified, onBack }: ExamStateScreensProps) {
   return (
     <div className="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm">
       <div className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
         <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-purple-50 to-white px-6 py-8 text-center">
-          <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-600" />
-          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-700">Exam Submitted</p>
-          <h1 className="mt-2 text-2xl font-bold">Your exam has been submitted</h1>
+          {proctoringDisqualified
+            ? <AlertCircle className="mx-auto h-14 w-14 text-rose-600" />
+            : <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-600" />}
+          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-700">
+            {proctoringDisqualified ? "Exam Security" : "Exam Submitted"}
+          </p>
+          <h1 className="mt-2 text-2xl font-bold">
+            {proctoringDisqualified ? "This attempt has ended" : "Your exam has been submitted"}
+          </h1>
         </div>
         <div className="px-6 py-7 text-center">
           <p className="text-sm leading-6 text-slate-600">
-            {submittedStatus === "TIMED_OUT"
+            {proctoringDisqualified
+              ? "This attempt was ended after repeated focus losses. You cannot retake this exam."
+              : submittedStatus === "TIMED_OUT"
               ? "Your exam time has ended and your answers have been submitted automatically."
               : "Your answers have been submitted successfully."}
           </p>

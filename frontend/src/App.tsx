@@ -24,6 +24,7 @@ import EditExam from "./pages/EditExam";
 import ForgotPassword from "./pages/ForgotPassword";
 import QuestionBank from "./pages/QuestionBank";
 import InstructorResults from "./pages/InstructorResults";
+import InstructorResultsOverview from "./pages/InstructorResultsOverview";
 import InstructorAttemptDetails from "./pages/InstructorAttemptDetails";
 import InstructorStudents from "./pages/InstructorStudents";
 
@@ -271,6 +272,15 @@ function App() {
         />
 
         {/* Instructor Results */}
+        <Route
+          path="/instructor/results"
+          element={
+            <ProtectedRoute allowedRole="instructor">
+              <InstructorResultsOverview />
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/instructor/exams/:examId/results"
           element={

@@ -317,13 +317,13 @@ function InstructorResults() {
             </div>
           </button>
 
-          <div className="hidden items-center gap-2 sm:flex">
+          <button type="button" onClick={() => navigate("/instructor/results")} className="hidden items-center gap-2 text-slate-600 transition hover:text-indigo-700 sm:flex">
             <BarChart3 className="h-4 w-4 text-indigo-600" />
 
             <span className="text-sm font-semibold text-slate-600">
-              Results
+              All Results
             </span>
-          </div>
+          </button>
         </div>
       </header>
 

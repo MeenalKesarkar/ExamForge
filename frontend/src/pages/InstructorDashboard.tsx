@@ -105,6 +105,15 @@ interface Exam {
 // HELPERS
 // ======================================================
 
+const isExamExpired = (
+  exam: Exam,
+  currentTime: number
+): boolean => Boolean(
+  exam.published &&
+  exam.endDate &&
+  Date.parse(exam.endDate) <= currentTime
+);
+
 const getYearLabel = (
   year?: number
 ): string => {
@@ -140,6 +149,18 @@ const getSemesterLabel = (
 function InstructorDashboard() {
   const navigate =
     useNavigate();
+
+  const [currentTime, setCurrentTime] =
+    useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(
+      () => setCurrentTime(Date.now()),
+      30_000
+    );
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   // ====================================================
   // STATE
@@ -580,6 +601,15 @@ function InstructorDashboard() {
 
             <button
               type="button"
+              onClick={() => navigate("/instructor/results")}
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 hover:text-indigo-600"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Results
+            </button>
+
+            <button
+              type="button"
               onClick={() => navigate("/instructor/students")}
               className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 hover:text-indigo-600"
             >
@@ -693,6 +723,18 @@ function InstructorDashboard() {
                 <LayoutDashboard className="h-4 w-4" />
 
                 Dashboard
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  navigate("/instructor/results");
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+              >
+                <BarChart3 className="h-4 w-4" />
+                Results
               </button>
 
               <button
@@ -1105,14 +1147,18 @@ function InstructorDashboard() {
 
                         <span
                           className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-extrabold ${
-                            exam.published
-                              ? "bg-emerald-50 text-emerald-600"
-                              : "bg-amber-50 text-amber-600"
+                            isExamExpired(exam, currentTime)
+                              ? "bg-rose-50 text-rose-600"
+                              : exam.published
+                                ? "bg-emerald-50 text-emerald-600"
+                                : "bg-amber-50 text-amber-600"
                           }`}
                         >
-                          {exam.published
-                            ? "Published"
-                            : "Draft"}
+                          {isExamExpired(exam, currentTime)
+                            ? "Expired"
+                            : exam.published
+                              ? "Published"
+                              : "Draft"}
                         </span>
                       </div>
 

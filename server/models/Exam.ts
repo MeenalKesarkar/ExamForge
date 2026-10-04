@@ -35,6 +35,7 @@ export interface IExam extends Document {
   shuffleOptions: boolean;
 
   published: boolean;
+  resultsHidden: boolean;
 
   createdBy: mongoose.Types.ObjectId;
 
@@ -191,6 +192,11 @@ const examSchema =
         type: Boolean,
         default: false,
         index: true,
+      },
+
+      resultsHidden: {
+        type: Boolean,
+        default: false,
       },
 
       /* =====================================================

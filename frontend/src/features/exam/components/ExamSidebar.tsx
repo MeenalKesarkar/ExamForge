@@ -11,6 +11,7 @@ interface ExamSidebarProps {
   answeredCount: number;
   unansweredCount: number;
   flaggedCount: number;
+  tabSwitchCount: number;
   submitting: boolean;
   onSelectQuestion: (index: number) => void;
   onSubmit: () => void;
@@ -26,6 +27,7 @@ export default function ExamSidebar({
   answeredCount,
   unansweredCount,
   flaggedCount,
+  tabSwitchCount,
   submitting,
   onSelectQuestion,
   onSubmit,
@@ -45,6 +47,7 @@ export default function ExamSidebar({
           <SummaryCard label="Remaining" value={unansweredCount} />
         </div>
         <div className="mt-3"><SummaryCard label="Flagged" value={flaggedCount} valueClass="text-amber-600" /></div>
+        <div className="mt-3"><SummaryCard label="Tab switches / blur" value={tabSwitchCount} valueClass={tabSwitchCount > 0 ? "text-rose-600" : "text-slate-700"} /></div>
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -82,6 +85,13 @@ export default function ExamSidebar({
           </ul>
         </section>
       )}
+
+      <section className="rounded-3xl border border-amber-200 bg-amber-50 p-4">
+        <h3 className="text-sm font-semibold text-amber-900">Exam monitoring</h3>
+        <p className="mt-1 text-xs leading-5 text-amber-800">
+          Keep this tab active and close other tabs or applications. This browser cannot inspect background apps. Three focus losses end the attempt and block another attempt.
+        </p>
+      </section>
 
       <button type="button" disabled={submitting} onClick={onSubmit} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-3.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50">
         {submitting ? <><Loader2 className="h-4 w-4 animate-spin" />Submitting...</> : <><Send className="h-4 w-4" />Submit Exam</>}

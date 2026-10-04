@@ -28,6 +28,8 @@ function ExamPage() {
     remainingSeconds,
     result,
     submittedStatus,
+    focusWarning,
+    proctoringDisqualified,
     flaggedQuestions,
     savingQuestionId,
     currentQuestion,
@@ -35,6 +37,7 @@ function ExamPage() {
     answeredCount,
     unansweredCount,
     flaggedCount,
+    tabSwitchCount,
     progress,
     isLowTime,
     isCriticalTime,
@@ -56,6 +59,7 @@ function ExamPage() {
     return (
       <ExamSubmittedScreen
         submittedStatus={submittedStatus}
+        proctoringDisqualified={proctoringDisqualified}
         onBack={returnToDashboard}
       />
     );
@@ -121,6 +125,14 @@ function ExamPage() {
         </div>
       )}
 
+      {focusWarning && (
+        <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900" role="alert">
+            {focusWarning}
+          </div>
+        </div>
+      )}
+
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
         <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
           <ExamQuestionPanel
@@ -148,6 +160,7 @@ function ExamPage() {
             answeredCount={answeredCount}
             unansweredCount={unansweredCount}
             flaggedCount={flaggedCount}
+            tabSwitchCount={tabSwitchCount}
             submitting={submitting}
             onSelectQuestion={setCurrentIndex}
             onSubmit={() => void submitExam(false)}

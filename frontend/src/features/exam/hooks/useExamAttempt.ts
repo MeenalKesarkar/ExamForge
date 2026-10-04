@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import type { AttemptData, AttemptResponse, ExamData, ExamQuestion, ExamResult } from "../types";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/$/, "");
+const MAX_FOCUS_LOSSES = 3;
 
 interface SubmitResponse {
   message?: string;
@@ -54,10 +55,13 @@ export function useExamAttempt() {
   const [result, setResult] = useState<ExamResult | null>(null);
   const [, setResultsAvailable] = useState(false);
   const [submittedStatus, setSubmittedStatus] = useState<"SUBMITTED" | "TIMED_OUT" | "EVALUATED" | null>(null);
+  const [focusWarning, setFocusWarning] = useState("");
+  const [proctoringDisqualified, setProctoringDisqualified] = useState(false);
   const [flaggedQuestions, setFlaggedQuestions] = useState<Set<string>>(() => new Set());
   const [savingQuestionId, setSavingQuestionId] = useState<string | null>(null);
   const serverOffsetRef = useRef(0);
   const autoSubmitStartedRef = useRef(false);
+  const focusLossRecordedRef = useRef(false);
 
   const loadAttempt = useCallback(async () => {
     if (!attemptId) {
@@ -78,6 +82,7 @@ export function useExamAttempt() {
 
       const loaded = data as AttemptResponse;
       setAttempt(loaded.attempt);
+      setProctoringDisqualified(Boolean(loaded.attempt.proctoringDisqualified));
       setExam(loaded.exam);
       setQuestions(loaded.questions);
       setAnswers(loaded.attempt.answers || {});
@@ -216,17 +221,62 @@ export function useExamAttempt() {
 
   useEffect(() => {
     if (!attemptId || !attempt || attempt.status !== "IN_PROGRESS") return;
-    const handleVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        void fetch(`${API_URL}/attempts/${attemptId}/tab-switch`, {
-          method: "PATCH",
-          credentials: "include",
-          keepalive: true,
-        });
-      }
+    const resetFocusLoss = () => {
+      focusLossRecordedRef.current = false;
     };
+
+    const recordFocusLoss = () => {
+      if (focusLossRecordedRef.current) return;
+      focusLossRecordedRef.current = true;
+
+      void fetch(`${API_URL}/attempts/${attemptId}/tab-switch`, {
+        method: "PATCH",
+        credentials: "include",
+        keepalive: true,
+      })
+        .then(async (response) => {
+          if (!response.ok) return;
+          const data = await response.json() as { tabSwitchCount?: number; terminated?: boolean };
+          if (typeof data.tabSwitchCount === "number") {
+            setAttempt((current) => current
+              ? { ...current, tabSwitchCount: data.tabSwitchCount }
+              : current);
+            if (data.terminated) {
+              setProctoringDisqualified(true);
+              setSubmittedStatus("TIMED_OUT");
+              setAttempt((current) => current
+                ? { ...current, status: "TIMED_OUT", proctoringDisqualified: true }
+                : current);
+            } else {
+              setFocusWarning(
+                `Focus loss warning ${data.tabSwitchCount} of ${MAX_FOCUS_LOSSES}. Keep this exam tab active; the attempt ends at ${MAX_FOCUS_LOSSES}.`
+              );
+            }
+          }
+        })
+        .catch((focusError) => {
+          focusLossRecordedRef.current = false;
+          console.error("Unable to record exam focus loss:", focusError);
+        });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") recordFocusLoss();
+      else resetFocusLoss();
+    };
+
+    const handleBlur = () => {
+      if (document.visibilityState === "visible") recordFocusLoss();
+    };
+
     document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", resetFocusLoss);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", resetFocusLoss);
+    };
   }, [attempt, attemptId]);
 
   const currentQuestion = questions[currentIndex];
@@ -250,9 +300,11 @@ export function useExamAttempt() {
   return {
     loading, submitting, error, attempt, exam, questions, answers,
     currentIndex, setCurrentIndex, remainingSeconds, result, submittedStatus,
+    focusWarning, proctoringDisqualified,
     flaggedQuestions, savingQuestionId, currentQuestion, currentAnswers,
     answeredCount, unansweredCount, flaggedCount, progress, isLowTime,
-    isCriticalTime, handleAnswerChange, toggleFlag, submitExam,
+    isCriticalTime, tabSwitchCount: attempt?.tabSwitchCount ?? 0,
+    handleAnswerChange, toggleFlag, submitExam,
     returnToDashboard: () => navigate("/student"),
   };
 }

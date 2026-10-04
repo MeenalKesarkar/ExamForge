@@ -66,6 +66,7 @@ export interface IAttempt
    * tab-switch counter.
    */
   tabSwitchCount: number;
+  proctoringDisqualified: boolean;
 
   createdAt: Date;
   updatedAt: Date;
@@ -200,6 +201,11 @@ const attemptSchema =
         type: Number,
         default: 0,
         min: 0,
+      },
+
+      proctoringDisqualified: {
+        type: Boolean,
+        default: false,
       },
     },
 

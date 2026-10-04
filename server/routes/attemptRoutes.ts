@@ -16,6 +16,8 @@ import {
   AuthenticatedRequest,
 } from "../middleware/authMiddleware";
 
+const MAX_PROCTORING_FOCUS_LOSSES = 3;
+
 const router = Router();
 
 /* =========================================================
@@ -185,6 +187,7 @@ const calculateScore = async (
       : 0;
 
   const passed =
+    !attempt.proctoringDisqualified &&
     score >=
     Number(exam.passingMarks || 0);
 
@@ -687,6 +690,8 @@ router.get(
             attempt.status,
           tabSwitchCount:
             attempt.tabSwitchCount,
+          proctoringDisqualified:
+            attempt.proctoringDisqualified,
         },
 
         exam: {
@@ -1025,14 +1030,30 @@ router.patch(
 
       attempt.tabSwitchCount += 1;
 
+      const terminated =
+        attempt.tabSwitchCount >=
+          MAX_PROCTORING_FOCUS_LOSSES;
+
+      if (terminated) {
+        attempt.proctoringDisqualified = true;
+        attempt.status = "TIMED_OUT";
+        attempt.submittedAt = new Date();
+
+        const result = await calculateScore(attempt, exam);
+        attempt.score = result.score;
+        attempt.totalMarks = result.totalMarks;
+        attempt.percentage = result.percentage;
+        attempt.passed = false;
+      }
+
       await attempt.save();
 
       return res.status(200).json({
-        message:
-          "Tab switch recorded",
-
-        tabSwitchCount:
-          attempt.tabSwitchCount,
+        message: terminated
+          ? "The attempt ended after too many focus losses"
+          : "Tab switch recorded",
+        tabSwitchCount: attempt.tabSwitchCount,
+        terminated,
       });
     } catch (error) {
       console.error(
