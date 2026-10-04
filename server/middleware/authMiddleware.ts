@@ -32,7 +32,8 @@ export interface AuthenticatedRequest
 
     role:
       | "student"
-      | "instructor";
+      | "instructor"
+      | "admin";
   };
 }
 
@@ -46,7 +47,8 @@ interface TokenPayload
 
   role:
     | "student"
-    | "instructor";
+    | "instructor"
+    | "admin";
 }
 
 // ======================================================
@@ -159,7 +161,9 @@ export const requireAuth = async (
       decoded.role !==
         "student" &&
       decoded.role !==
-        "instructor"
+        "instructor" &&
+      decoded.role !==
+        "admin"
     ) {
       res.status(401).json({
         message:
@@ -281,7 +285,7 @@ export const requireAuth = async (
 export const requireRole =
   (
     ...allowedRoles: Array<
-      "student" | "instructor"
+      "student" | "instructor" | "admin"
     >
   ) =>
   (

@@ -115,6 +115,12 @@ router.get(
         return;
       }
 
+      const student = await User.findById(req.user!.userId);
+
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
       const exams = await Exam.find({
         published: true,
       })
@@ -146,37 +152,60 @@ router.get(
         });
 
       const now = new Date();
+      const retentionPeriodMs = 4 * 24 * 60 * 60 * 1000;
+
+      const matchesTarget = (target: unknown, studentValue: unknown) => {
+        if (target === undefined || target === null || target === "") return true;
+        if (studentValue === undefined || studentValue === null || studentValue === "") return false;
+        if (typeof target === "string" && typeof studentValue === "string") {
+          return target.trim().toLowerCase() === studentValue.trim().toLowerCase();
+        }
+        return Number(target) === Number(studentValue);
+      };
 
       const examsWithStatus =
-        exams.map((exam: any) => {
-          let availabilityStatus =
-            "ACTIVE";
+        exams
+          .filter((exam: any) => {
+            const eligible =
+              matchesTarget(exam.degree, student.degree) &&
+              matchesTarget(exam.yearOfStudy, student.yearOfStudy) &&
+              matchesTarget(exam.semester, student.semester);
 
-          if (
-            exam.startDate &&
-            now <
-              new Date(
-                exam.startDate
-              )
-          ) {
-            availabilityStatus =
-              "UPCOMING";
-          } else if (
-            exam.endDate &&
-            now >=
-              new Date(
-                exam.endDate
-              )
-          ) {
-            availabilityStatus =
-              "EXPIRED";
-          }
+            if (!eligible) return false;
+            if (!exam.endDate) return true;
 
-          return {
-            ...exam.toObject(),
-            availabilityStatus,
-          };
-        });
+            return now.getTime() <
+              new Date(exam.endDate).getTime() + retentionPeriodMs;
+          })
+          .map((exam: any) => {
+            let availabilityStatus =
+              "ACTIVE";
+
+            if (
+              exam.startDate &&
+              now <
+                new Date(
+                  exam.startDate
+                )
+            ) {
+              availabilityStatus =
+                "UPCOMING";
+            } else if (
+              exam.endDate &&
+              now >=
+                new Date(
+                  exam.endDate
+                )
+            ) {
+              availabilityStatus =
+                "EXPIRED";
+            }
+
+            return {
+              ...exam.toObject(),
+              availabilityStatus,
+            };
+          });
 
       return res.status(200).json(
         examsWithStatus
@@ -1407,9 +1436,9 @@ router.post(
 
       if (
         exam.degree &&
-        student.degree &&
-        exam.degree !==
-          student.degree
+        (!student.degree ||
+          exam.degree.trim().toLowerCase() !==
+            student.degree.trim().toLowerCase())
       ) {
         return res.status(403).json({
           message:
@@ -1419,9 +1448,8 @@ router.post(
 
       if (
         exam.yearOfStudy &&
-        student.yearOfStudy &&
-        exam.yearOfStudy !==
-          student.yearOfStudy
+        (!student.yearOfStudy ||
+          exam.yearOfStudy !== student.yearOfStudy)
       ) {
         return res.status(403).json({
           message:
@@ -1431,9 +1459,8 @@ router.post(
 
       if (
         exam.semester &&
-        student.semester &&
-        exam.semester !==
-          student.semester
+        (!student.semester ||
+          exam.semester !== student.semester)
       ) {
         return res.status(403).json({
           message:

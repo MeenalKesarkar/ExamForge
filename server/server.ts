@@ -51,6 +51,7 @@ import profileRoutes from "./routes/profileRoutes";
 import examRoutes from "./routes/examRoutes";
 import attemptRoutes from "./routes/attemptRoutes";
 import questionRoutes from "./routes/questionRoutes";
+import adminRoutes from "./routes/adminRoutes";
 
 // ======================================================
 // APP
@@ -207,6 +208,11 @@ app.get(
 app.use(
   "/api/auth",
   authRoutes
+);
+
+app.use(
+  "/api/admin",
+  adminRoutes
 );
 
 // ------------------------------------------------------

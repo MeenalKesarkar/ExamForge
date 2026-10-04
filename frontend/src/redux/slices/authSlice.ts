@@ -6,9 +6,20 @@ import type {
   PayloadAction,
 } from "@reduxjs/toolkit";
 
+// ======================================================
+// TYPES
+// ======================================================
+
 export type UserRole =
   | "student"
-  | "instructor";
+  | "instructor"
+  | "admin";
+
+export type AccountStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "suspended";
 
 export interface TeachingAssignment {
   subject: string;
@@ -26,6 +37,9 @@ export interface User {
 
   role: UserRole;
 
+  accountStatus:
+    AccountStatus;
+
   degree?: string;
   yearOfStudy?: number;
   semester?: number;
@@ -42,6 +56,10 @@ export interface User {
   profilePicture?: string | null;
 }
 
+// ======================================================
+// AUTH STATE
+// ======================================================
+
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -49,9 +67,13 @@ interface AuthState {
 
 const initialState:
   AuthState = {
-  user: null,
-  isAuthenticated: false,
-};
+    user: null,
+    isAuthenticated: false,
+  };
+
+// ======================================================
+// AUTH SLICE
+// ======================================================
 
 const authSlice =
   createSlice({
@@ -60,6 +82,10 @@ const authSlice =
     initialState,
 
     reducers: {
+      // ------------------------------------------------
+      // LOGIN
+      // ------------------------------------------------
+
       login: (
         state,
         action: PayloadAction<{
@@ -72,6 +98,10 @@ const authSlice =
         state.isAuthenticated =
           true;
       },
+
+      // ------------------------------------------------
+      // UPDATE USER
+      // ------------------------------------------------
 
       updateUser: (
         state,
@@ -87,21 +117,33 @@ const authSlice =
         }
       },
 
+      // ------------------------------------------------
+      // LOGOUT
+      // ------------------------------------------------
+
       logout: (
         state
       ) => {
         state.user = null;
+
         state.isAuthenticated =
           false;
       },
     },
   });
 
+// ======================================================
+// ACTIONS
+// ======================================================
+
 export const {
   login,
   updateUser,
   logout,
-} =
-  authSlice.actions;
+} = authSlice.actions;
+
+// ======================================================
+// REDUCER
+// ======================================================
 
 export default authSlice.reducer;

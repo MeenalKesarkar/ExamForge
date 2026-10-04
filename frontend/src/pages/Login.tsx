@@ -139,25 +139,46 @@ export default function Login() {
         });
 
       // ------------------------------------------------
-      // STORE USER IN REDUX
+      // ACCOUNT STATUS
       // ------------------------------------------------
-      //
-      // We intentionally don't import your hooks.ts
-      // or authSlice.ts here because those paths are
-      // currently causing the TypeScript errors shown
-      // in your screenshot.
-      //
-      // Your auth reducer already listens to:
-      //
-      // auth/login
-      //
+      // Only approved accounts can access ExamForge.
+      // The backend is the final security layer, while
+      // this check keeps the frontend state consistent.
       // ------------------------------------------------
 
-      dispatch(
-        login({
-          user: result.user,
-        })
-      );
+      if (
+        result.user.accountStatus !==
+        "approved"
+      ) {
+        if (
+          result.user.accountStatus ===
+          "pending"
+        ) {
+          setError(
+            "Your account is pending approval. Please wait for an administrator to approve your account."
+          );
+        } else if (
+          result.user.accountStatus ===
+          "rejected"
+        ) {
+          setError(
+            "Your account registration was rejected. Please contact your administrator."
+          );
+        } else if (
+          result.user.accountStatus ===
+          "suspended"
+        ) {
+          setError(
+            "Your account has been suspended. Please contact your administrator."
+          );
+        } else {
+          setError(
+            "Your account is not approved for ExamForge access."
+          );
+        }
+
+        return;
+      }
 
       // ------------------------------------------------
       // REDIRECT BASED ON ROLE
@@ -167,6 +188,12 @@ export default function Login() {
         result.user.role ===
         "student"
       ) {
+        dispatch(
+          login({
+            user: result.user,
+          })
+        );
+
         navigate(
           "/student",
           {
@@ -177,15 +204,29 @@ export default function Login() {
         result.user.role ===
         "instructor"
       ) {
+        dispatch(
+          login({
+            user: result.user,
+          })
+        );
+
         navigate(
           "/instructor",
           {
             replace: true,
           }
         );
+      } else if (result.user.role === "admin") {
+        dispatch(
+          login({
+            user: result.user,
+          })
+        );
+
+        navigate("/admin", { replace: true });
       } else {
         setError(
-          "Your account has an invalid role."
+          "Your account does not have access to this portal."
         );
       }
     } catch (err) {

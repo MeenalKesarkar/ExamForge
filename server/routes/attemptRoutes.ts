@@ -240,7 +240,7 @@ const areResultsAvailable = (
   now = new Date()
 ): boolean => {
   if (!exam.endDate) {
-    return true;
+    return false;
   }
 
   return (
@@ -399,6 +399,80 @@ const requireInstructorExamAccess =
 
     return exam;
   };
+
+/* =========================================================
+   STUDENT RESULTS LIST
+   GET /api/attempts/student/results
+========================================================= */
+
+router.get(
+  "/student/results",
+  requireAuth,
+  async (
+    req: AuthenticatedRequest,
+    res: Response
+  ) => {
+    try {
+      if (!req.user || req.user.role !== "student") {
+        return res.status(403).json({
+          message: "Student access required",
+        });
+      }
+
+      const attempts = await Attempt.find({
+        studentId: req.user.userId,
+        status: {
+          $in: ["SUBMITTED", "EVALUATED", "TIMED_OUT"],
+        },
+      }).sort({
+        submittedAt: -1,
+        createdAt: -1,
+      });
+
+      const results = await Promise.all(
+        attempts.map(async (attempt) => {
+          const exam = await Exam.findById(attempt.examId)
+            .select("title subject endDate totalMarks passingMarks");
+
+          if (!exam) return null;
+
+          const resultsAvailable = areResultsAvailable(exam, new Date());
+
+          return {
+            attemptId: attempt._id,
+            status: attempt.status,
+            submittedAt: attempt.submittedAt,
+            exam: {
+              _id: exam._id,
+              title: exam.title,
+              subject: exam.subject,
+              endDate: exam.endDate,
+            },
+            resultsAvailable,
+            result: resultsAvailable
+              ? {
+                  score: attempt.score ?? 0,
+                  totalMarks: attempt.totalMarks ?? exam.totalMarks,
+                  percentage: attempt.percentage ?? 0,
+                  passed: attempt.passed ?? false,
+                  passingMarks: exam.passingMarks,
+                }
+              : null,
+          };
+        })
+      );
+
+      return res.status(200).json(
+        results.filter((result) => result !== null)
+      );
+    } catch (error) {
+      console.error("Get student results error:", error);
+      return res.status(500).json({
+        message: "Failed to fetch student results",
+      });
+    }
+  }
+);
 
 /* =========================================================
    GET SINGLE ATTEMPT

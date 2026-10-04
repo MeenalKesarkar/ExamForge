@@ -528,7 +528,7 @@ function CreateExam() {
             HERO
         ================================================= */}
 
-        <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#11163b] via-[#292272] to-[#6815ba] p-6 text-white shadow-xl sm:p-8">
+        <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-r from-indigo-700 via-purple-700 to-violet-700 p-6 text-white shadow-xl sm:p-8">
 
           <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
 

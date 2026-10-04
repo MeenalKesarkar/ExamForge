@@ -11,6 +11,17 @@ const API_URL = (
 // TYPES
 // ======================================================
 
+export type UserRole =
+  | "student"
+  | "instructor"
+  | "admin";
+
+export type AccountStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "suspended";
+
 export interface TeachingAssignment {
   subject: string;
   degree: string;
@@ -29,14 +40,22 @@ export interface RegisterRequest {
   name: string;
   email: string;
   password: string;
+
+  // Public registration is only for
+  // student and instructor.
   role: "student" | "instructor";
+
   degree?: string;
   yearOfStudy?: number;
   semester?: number;
   studentId?: string;
   classSection?: string;
+
   institution?: string;
-  teachingAssignments?: TeachingAssignment[];
+
+  teachingAssignments?:
+    TeachingAssignment[];
+
   phone?: string;
   city?: string;
 }
@@ -45,14 +64,23 @@ export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: "student" | "instructor";
+
+  role: UserRole;
+
+  accountStatus:
+    AccountStatus;
+
   degree?: string;
   yearOfStudy?: number;
   semester?: number;
   studentId?: string;
   classSection?: string;
+
   institution?: string;
-  teachingAssignments?: TeachingAssignment[];
+
+  teachingAssignments?:
+    TeachingAssignment[];
+
   phone?: string;
   city?: string;
   bio?: string;
@@ -151,16 +179,21 @@ export const loginUser =
           {
             method: "POST",
             credentials: "include",
+
             headers: {
               "Content-Type":
                 "application/json",
+
               Accept:
                 "application/json",
             },
+
             body: JSON.stringify({
               email,
+
               password:
                 data.password,
+
               rememberMe:
                 Boolean(
                   data.rememberMe
@@ -215,23 +248,48 @@ export const registerUser =
           `${API_URL}/auth/register`,
           {
             method: "POST",
+
+            /*
+             * Keep credentials enabled because
+             * this API uses cookie authentication.
+             *
+             * The backend now intentionally does
+             * NOT create login cookies during
+             * registration because the account
+             * starts as pending.
+             */
             credentials: "include",
+
             headers: {
               "Content-Type":
                 "application/json",
+
               Accept:
                 "application/json",
             },
+
             body: JSON.stringify({
               ...data,
-              name: data.name.trim(),
-              email: data.email.trim().toLowerCase(),
+
+              name:
+                data.name.trim(),
+
+              email:
+                data.email
+                  .trim()
+                  .toLowerCase(),
+
+              institution:
+                data.institution
+                  ?.trim(),
             }),
           }
         );
 
       const result =
-        await parseResponse(response);
+        await parseResponse(
+          response
+        );
 
       if (!response.ok) {
         throw new Error(
@@ -248,7 +306,9 @@ export const registerUser =
 
       return result as RegisterResponse;
     } catch (error) {
-      if (error instanceof TypeError) {
+      if (
+        error instanceof TypeError
+      ) {
         throw new Error(
           "Unable to connect to ExamForge. Make sure the backend is running on port 5000."
         );
@@ -269,7 +329,9 @@ export const refreshSession =
         `${API_URL}/auth/refresh`,
         {
           method: "POST",
+
           credentials: "include",
+
           headers: {
             Accept:
               "application/json",
@@ -289,6 +351,12 @@ export const refreshSession =
       );
     }
 
+    if (!result?.user) {
+      throw new Error(
+        "Refresh response did not contain user information."
+      );
+    }
+
     return result as RefreshResponse;
   };
 
@@ -303,7 +371,9 @@ export const logoutUser =
         `${API_URL}/auth/logout`,
         {
           method: "POST",
+
           credentials: "include",
+
           headers: {
             Accept:
               "application/json",
@@ -328,13 +398,17 @@ export const sendForgotPasswordOTP =
         `${API_URL}/auth/forgot-password/send-otp`,
         {
           method: "POST",
+
           credentials: "include",
+
           headers: {
             "Content-Type":
               "application/json",
+
             Accept:
               "application/json",
           },
+
           body: JSON.stringify({
             email:
               email
@@ -373,18 +447,23 @@ export const verifyForgotPasswordOTP =
         `${API_URL}/auth/forgot-password/verify-otp`,
         {
           method: "POST",
+
           credentials: "include",
+
           headers: {
             "Content-Type":
               "application/json",
+
             Accept:
               "application/json",
           },
+
           body: JSON.stringify({
             email:
               email
                 .trim()
                 .toLowerCase(),
+
             otp:
               otp.trim(),
           }),
@@ -427,19 +506,25 @@ export const resetPassword =
         `${API_URL}/auth/forgot-password/reset`,
         {
           method: "POST",
+
           credentials: "include",
+
           headers: {
             "Content-Type":
               "application/json",
+
             Accept:
               "application/json",
           },
+
           body: JSON.stringify({
             email:
               email
                 .trim()
                 .toLowerCase(),
+
             resetToken,
+
             newPassword,
           }),
         }

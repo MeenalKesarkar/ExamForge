@@ -3,9 +3,28 @@ import mongoose, {
   Schema,
 } from "mongoose";
 
+// ======================================================
+// USER ROLE
+// ======================================================
+
 export type UserRole =
   | "student"
-  | "instructor";
+  | "instructor"
+  | "admin";
+
+// ======================================================
+// ACCOUNT STATUS
+// ======================================================
+
+export type AccountStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "suspended";
+
+// ======================================================
+// TEACHING ASSIGNMENT
+// ======================================================
 
 export interface TeachingAssignment {
   subject: string;
@@ -15,6 +34,10 @@ export interface TeachingAssignment {
   classSections: string[];
 }
 
+// ======================================================
+// USER INTERFACE
+// ======================================================
+
 export interface IUser
   extends Document {
   name: string;
@@ -22,6 +45,8 @@ export interface IUser
   passwordHash: string;
 
   role: UserRole;
+
+  accountStatus: AccountStatus;
 
   degree?: string;
   yearOfStudy?: number;
@@ -40,9 +65,17 @@ export interface IUser
 
   isActive: boolean;
 
+  approvedAt?: Date;
+  approvedBy?: mongoose.Types.ObjectId;
+  rejectionReason?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }
+
+// ======================================================
+// TEACHING ASSIGNMENT SCHEMA
+// ======================================================
 
 const teachingAssignmentSchema =
   new Schema<TeachingAssignment>(
@@ -72,35 +105,62 @@ const teachingAssignmentSchema =
       semesters: {
         type: [Number],
         required: true,
+
         validate: {
-          validator: (value: number[]) =>
+          validator: (
+            value: number[]
+          ) =>
             Array.isArray(value) &&
             value.length > 0 &&
-            value.every((semester) =>
-              [1, 2, 3, 4, 5, 6].includes(semester)
+            value.every(
+              (semester) =>
+                [1, 2, 3, 4, 5, 6].includes(
+                  semester
+                )
             ),
-          message: "At least one valid semester is required",
+
+          message:
+            "At least one valid semester is required",
         },
       },
 
       classSections: {
         type: [String],
         required: true,
+
         validate: {
-          validator: (value: string[]) =>
+          validator: (
+            value: string[]
+          ) =>
             Array.isArray(value) &&
             value.length > 0 &&
-            value.every((section) => Boolean(section.trim())),
-          message: "At least one class section is required",
+            value.every(
+              (section) =>
+                Boolean(section.trim())
+            ),
+
+          message:
+            "At least one class section is required",
         },
       },
     },
-    { _id: false }
+
+    {
+      _id: false,
+    }
   );
+
+// ======================================================
+// USER SCHEMA
+// ======================================================
 
 const userSchema =
   new Schema<IUser>(
     {
+      // --------------------------------------------------
+      // BASIC INFORMATION
+      // --------------------------------------------------
+
       name: {
         type: String,
         required: true,
@@ -123,15 +183,52 @@ const userSchema =
         required: true,
       },
 
+      // --------------------------------------------------
+      // ROLE
+      // --------------------------------------------------
+
       role: {
         type: String,
+
         enum: [
           "student",
           "instructor",
+          "admin",
         ],
+
         required: true,
+
         default: "student",
       },
+
+      // --------------------------------------------------
+      // ACCOUNT STATUS
+      // --------------------------------------------------
+      //
+      // New student/instructor registrations should be
+      // pending until an admin approves them.
+      //
+      // Admin accounts should be created as approved.
+      // --------------------------------------------------
+
+      accountStatus: {
+        type: String,
+
+        enum: [
+          "pending",
+          "approved",
+          "rejected",
+          "suspended",
+        ],
+
+        required: true,
+
+        default: "pending",
+      },
+
+      // --------------------------------------------------
+      // STUDENT INFORMATION
+      // --------------------------------------------------
 
       degree: {
         type: String,
@@ -163,16 +260,31 @@ const userSchema =
         maxlength: 20,
       },
 
+      // --------------------------------------------------
+      // INSTITUTION
+      // --------------------------------------------------
+
       institution: {
         type: String,
         trim: true,
         maxlength: 150,
       },
 
+      // --------------------------------------------------
+      // INSTRUCTOR TEACHING ASSIGNMENTS
+      // --------------------------------------------------
+
       teachingAssignments: {
-        type: [teachingAssignmentSchema],
+        type: [
+          teachingAssignmentSchema,
+        ],
+
         default: [],
       },
+
+      // --------------------------------------------------
+      // PROFILE INFORMATION
+      // --------------------------------------------------
 
       phone: {
         type: String,
@@ -197,10 +309,33 @@ const userSchema =
         default: null,
       },
 
+      // --------------------------------------------------
+      // ACCOUNT ENABLE / DISABLE
+      // --------------------------------------------------
+
       isActive: {
         type: Boolean,
         default: true,
         required: true,
+      },
+
+      // --------------------------------------------------
+      // APPROVAL INFORMATION
+      // --------------------------------------------------
+
+      approvedAt: {
+        type: Date,
+      },
+
+      approvedBy: {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+
+      rejectionReason: {
+        type: String,
+        trim: true,
+        maxlength: 500,
       },
     },
 
@@ -209,6 +344,10 @@ const userSchema =
       timestamps: true,
     }
   );
+
+// ======================================================
+// STUDENT ID INDEX
+// ======================================================
 
 userSchema.index(
   {
@@ -219,6 +358,10 @@ userSchema.index(
     sparse: true,
   }
 );
+
+// ======================================================
+// USER MODEL
+// ======================================================
 
 const User =
   mongoose.models.User ||

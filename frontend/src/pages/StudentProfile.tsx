@@ -787,7 +787,10 @@ function StudentProfile() {
   ) as ProfileUser | null;
 
   const authUserRef = useRef<ProfileUser | null>(authUser);
-  authUserRef.current = authUser;
+
+  useEffect(() => {
+    authUserRef.current = authUser;
+  }, [authUser]);
 
   // FORM STATE
   const [name, setName] = useState("");
@@ -904,6 +907,7 @@ function StudentProfile() {
               name: user.name,
               email: user.email,
               role: user.role,
+              accountStatus: "approved",
               degree: "BCA",
               yearOfStudy: academic.year,
               semester: academic.semester,
@@ -1181,6 +1185,7 @@ function StudentProfile() {
             name: savedUser.name,
             email: savedUser.email,
             role: savedUser.role,
+            accountStatus: "approved",
             degree: "BCA",
             yearOfStudy: savedYear,
             semester: savedSemester,
