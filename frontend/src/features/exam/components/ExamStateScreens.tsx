@@ -43,7 +43,7 @@ export function ExamSubmittedScreen({ submittedStatus, proctoringDisqualified, o
         <div className="px-6 py-7 text-center">
           <p className="text-sm leading-6 text-slate-600">
             {proctoringDisqualified
-              ? "This attempt was ended after repeated focus losses. You cannot retake this exam."
+              ? "Your current attempt was automatically submitted after repeated focus losses. You may use another attempt if one remains."
               : submittedStatus === "TIMED_OUT"
               ? "Your exam time has ended and your answers have been submitted automatically."
               : "Your answers have been submitted successfully."}

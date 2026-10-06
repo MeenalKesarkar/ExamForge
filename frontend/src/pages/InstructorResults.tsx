@@ -156,12 +156,32 @@ function InstructorResults() {
     void loadResults();
   }, [examId, navigate]);
 
+  const bestAttempts = useMemo(() => {
+    const grouped = new Map<string, Attempt[]>();
+    for (const attempt of attempts) {
+      const student = attempt.student ?? attempt.studentId;
+      const key = typeof student === "object" && student
+        ? student._id
+        : typeof student === "string" ? student : getStudentEmail(attempt) || getStudentName(attempt);
+      grouped.set(key, [...(grouped.get(key) || []), attempt]);
+    }
+    return Array.from(grouped.values()).map((studentAttempts) => {
+      const completed = studentAttempts.filter((attempt) => attempt.status !== "IN_PROGRESS");
+      const candidates = completed.length ? completed : studentAttempts;
+      return candidates.sort((a, b) => {
+        const scoreDifference = (b.score ?? 0) - (a.score ?? 0);
+        if (scoreDifference) return scoreDifference;
+        return new Date(b.submittedAt || b.startTime).getTime() - new Date(a.submittedAt || a.startTime).getTime();
+      })[0];
+    });
+  }, [attempts]);
+
   const filteredAttempts =
     useMemo(() => {
       const query =
         search.trim().toLowerCase();
 
-      return attempts.filter(
+      return bestAttempts.filter(
         (attempt) => {
           const name =
             getStudentName(
@@ -190,14 +210,14 @@ function InstructorResults() {
         }
       );
     }, [
-      attempts,
+      bestAttempts,
       search,
       statusFilter,
     ]);
 
   const stats = useMemo(() => {
     const completed =
-      attempts.filter(
+      bestAttempts.filter(
         (attempt) =>
           attempt.status ===
             "SUBMITTED" ||
@@ -247,7 +267,7 @@ function InstructorResults() {
       passed: passed.length,
       average,
     };
-  }, [attempts]);
+  }, [attempts.length, bestAttempts]);
 
   if (!examId) {
     return (

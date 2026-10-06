@@ -46,12 +46,16 @@ export interface IAttempt
    */
   startTime: Date;
   endTime: Date;
+  remainingSeconds?: number;
+  timerPaused?: boolean;
+  lastHeartbeatAt?: Date | null;
 
   submittedAt:
     | Date
     | null;
 
   status: AttemptStatus;
+  submissionReason?: "SECURITY_VIOLATION" | "TIME_EXPIRED" | "STUDENT_SUBMITTED";
 
   /*
    * Final calculated result.
@@ -139,6 +143,21 @@ const attemptSchema =
         required: true,
       },
 
+      remainingSeconds: {
+        type: Number,
+        min: 0,
+      },
+
+      timerPaused: {
+        type: Boolean,
+        default: false,
+      },
+
+      lastHeartbeatAt: {
+        type: Date,
+        default: null,
+      },
+
       /* ---------------------------------------------------
          SUBMISSION
       --------------------------------------------------- */
@@ -163,6 +182,16 @@ const attemptSchema =
         required: true,
         default: "IN_PROGRESS",
         index: true,
+      },
+
+      submissionReason: {
+        type: String,
+        enum: [
+          "SECURITY_VIOLATION",
+          "TIME_EXPIRED",
+          "STUDENT_SUBMITTED",
+        ],
+        default: undefined,
       },
 
       /* ---------------------------------------------------

@@ -9,6 +9,10 @@ export interface Exam {
   startDate?: string | null;
   endDate?: string | null;
   availabilityStatus?: "UPCOMING" | "ACTIVE" | "EXPIRED";
+  attemptsUsed?: number;
+  attemptsRemaining?: number;
+  activeAttemptId?: string | null;
+  activeAttemptPaused?: boolean;
 }
 
 export interface StudentResult {

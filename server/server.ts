@@ -51,6 +51,7 @@ import profileRoutes from "./routes/profileRoutes";
 import examRoutes from "./routes/examRoutes";
 import attemptRoutes from "./routes/attemptRoutes";
 import questionRoutes from "./routes/questionRoutes";
+import questionPdfRoutes from "./routes/questionPdfRoutes";
 import adminRoutes from "./routes/adminRoutes";
 
 // ======================================================
@@ -245,6 +246,11 @@ app.use(
 // ------------------------------------------------------
 // Question Bank
 // ------------------------------------------------------
+
+app.use(
+  "/api/questions",
+  questionPdfRoutes
+);
 
 app.use(
   "/api/questions",

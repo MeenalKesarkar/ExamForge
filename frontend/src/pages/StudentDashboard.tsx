@@ -264,18 +264,11 @@ function StudentDashboard() {
   // ======================================================
 
   const handleConfirmLogout =
-    async () => {
-      try {
-        await logoutUser();
-      } catch (logoutError) {
-        console.error(
-          "Logout error:",
-          logoutError
-        );
-      } finally {
-        dispatch(logout());
-        navigate("/");
-      }
+    () => {
+      dispatch(logout());
+      navigate("/", { replace: true });
+      void logoutUser();
+      setShowLogoutModal(false);
     };
 
   // ======================================================

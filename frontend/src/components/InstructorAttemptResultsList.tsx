@@ -86,19 +86,14 @@ export default function InstructorAttemptResultsList({ attempts, exam, search, o
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <h2 className="font-semibold">
-                      Student Attempts
+                      Best Student Results
                     </h2>
     
                     <p className="mt-1 text-xs text-slate-500">
                       {
                         attempts.length
                       }{" "}
-                      result
-                      {attempts.length ===
-                      1
-                        ? ""
-                        : "s"}{" "}
-                      shown
+                      student result{attempts.length === 1 ? "" : "s"} shown · highest score per student
                     </p>
                   </div>
                 </div>

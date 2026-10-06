@@ -18,6 +18,7 @@ export interface AttemptData {
   answers: Record<string, string[]>;
   startTime: string;
   endTime: string;
+  timerPaused?: boolean;
   submittedAt?: string | null;
   status: "IN_PROGRESS" | "SUBMITTED" | "EVALUATED" | "TIMED_OUT";
   tabSwitchCount?: number;
@@ -64,6 +65,7 @@ export interface AttemptResponse {
   questions: ExamQuestion[];
   serverNow: string;
   remainingSeconds?: number;
+  timerPaused?: boolean;
   resultsAvailable?: boolean;
   result?: ExamResult | null;
 }

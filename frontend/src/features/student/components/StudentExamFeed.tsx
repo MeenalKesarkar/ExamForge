@@ -235,6 +235,9 @@ export default function StudentExamFeed({
                         const canStart =
                           availabilityStatus ===
                           "ACTIVE";
+                        const hasActiveAttempt = Boolean(exam.activeAttemptId);
+                        const attemptsRemaining = exam.attemptsRemaining ?? maxAttempts;
+                        const attemptsExhausted = !hasActiveAttempt && attemptsRemaining <= 0;
                         return (
                           <article
                             key={
@@ -391,7 +394,8 @@ export default function StudentExamFeed({
                                 type="button"
                                 disabled={
                                   isStarting ||
-                                  !canStart
+                                  (!canStart && !hasActiveAttempt) ||
+                                  attemptsExhausted
                                 }
                                 onClick={() =>
                                   onStartExam(exam._id)
@@ -417,9 +421,24 @@ export default function StudentExamFeed({
                                   </>
                                 ) : (
                                   <>
-                                    <Play className="h-4 w-4 fill-current" />
-                                    Start Exam
-                                    <ArrowRight className="ml-auto h-4 w-4 transition group-hover:translate-x-1" />
+                                    {attemptsExhausted ? (
+                                      <>
+                                        <CircleCheck className="h-4 w-4" />
+                                        Attempts Complete
+                                      </>
+                                    ) : hasActiveAttempt ? (
+                                      <>
+                                        <Play className="h-4 w-4 fill-current" />
+                                        Resume Exam
+                                        <ArrowRight className="ml-auto h-4 w-4 transition group-hover:translate-x-1" />
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Play className="h-4 w-4 fill-current" />
+                                        Start Exam
+                                        <ArrowRight className="ml-auto h-4 w-4 transition group-hover:translate-x-1" />
+                                      </>
+                                    )}
                                   </>
                                 )}
                               </button>

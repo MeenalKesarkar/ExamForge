@@ -45,15 +45,19 @@ function ProtectedRoute({
   const dispatch = useAppDispatch();
   const location = useLocation();
   const [restoring, setRestoring] = useState(!isAuthenticated);
+  const [restoreError, setRestoreError] = useState("");
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
 
   useEffect(() => {
     if (isAuthenticated && user) {
       setRestoring(false);
+      setRestoreError("");
       return;
     }
 
     let active = true;
     setRestoring(true);
+    setRestoreError("");
     void refreshSession()
       .then((session) => {
         if (active) {
@@ -63,8 +67,13 @@ function ProtectedRoute({
           }));
         }
       })
-      .catch(() => {
-        if (active) dispatch(logout());
+      .catch((error: Error & { status?: number }) => {
+        if (!active) return;
+        if (error.status === 401 || error.status === 403) {
+          dispatch(logout());
+        } else {
+          setRestoreError("ExamForge could not verify your saved session. Check your connection and try again; your session has not been cleared.");
+        }
       })
       .finally(() => {
         if (active) setRestoring(false);
@@ -73,15 +82,15 @@ function ProtectedRoute({
     return () => {
       active = false;
     };
-  }, [dispatch, isAuthenticated, user]);
+  }, [dispatch, isAuthenticated, user, restoreAttempt]);
 
   useEffect(() => {
     if (!isAuthenticated || !sessionExpiresAt) return;
 
     const remaining = sessionExpiresAt - Date.now();
     const expireSession = async () => {
-      await logoutUser();
       dispatch(logout());
+      await logoutUser();
     };
 
     if (remaining <= 0) {
@@ -100,6 +109,18 @@ function ProtectedRoute({
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
         <p className="text-sm text-slate-500">Restoring your secure session...</p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated && restoreError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <section className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl">
+          <h1 className="text-xl font-extrabold text-slate-900">Session check paused</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">{restoreError}</p>
+          <button type="button" onClick={() => setRestoreAttempt((count) => count + 1)} className="mt-6 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-700">Try again</button>
+        </section>
       </div>
     );
   }

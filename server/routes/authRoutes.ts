@@ -1153,8 +1153,6 @@ router.post(
         error
       );
 
-      clearAuthCookies(res);
-
       return res.status(500).json({
         message:
           "Unable to refresh session",

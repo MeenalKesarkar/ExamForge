@@ -384,20 +384,14 @@ function StudentHeader({
     navigate(path);
   };
 
-  const handleConfirmLogout = async () => {
-    try {
-      setLoggingOut(true);
-
-      await fetch(`${API_URL}/auth/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
-    } catch (err) {
-      console.error("Logout request error:", err);
-    } finally {
-      dispatch(logout());
-      navigate("/");
-    }
+  const handleConfirmLogout = () => {
+    setLoggingOut(true);
+    dispatch(logout());
+    navigate("/", { replace: true });
+    void fetch(`${API_URL}/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    }).catch((err) => console.error("Logout request error:", err));
   };
 
   const navItems = [

@@ -30,6 +30,8 @@ import {
 import {
   useNavigate,
 } from "react-router-dom";
+import { useAppDispatch } from "../redux/hooks";
+import { logout } from "../redux/slices/authSlice";
 import { API_URL } from "../apiConfig";
 
 // ======================================================
@@ -145,6 +147,7 @@ const getSemesterLabel = (
 // ======================================================
 
 function InstructorDashboard() {
+  const dispatch = useAppDispatch();
   const navigate =
     useNavigate();
 
@@ -474,11 +477,11 @@ function InstructorDashboard() {
   // ====================================================
 
   const handleLogout =
-    async () => {
-      try {
-        setLoggingOut(true);
-
-        await fetch(
+    () => {
+      setLoggingOut(true);
+      dispatch(logout());
+      navigate("/", { replace: true });
+      void fetch(
           `${API_URL}/auth/logout`,
           {
             method: "POST",
@@ -491,17 +494,7 @@ function InstructorDashboard() {
                 "application/json",
             },
           }
-        );
-      } catch (err) {
-        console.error(
-          "Logout error:",
-          err
-        );
-      } finally {
-        navigate("/");
-
-        setLoggingOut(false);
-      }
+        ).catch((err) => console.error("Logout error:", err));
     };
 
   // ====================================================

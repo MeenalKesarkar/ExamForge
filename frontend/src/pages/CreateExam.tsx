@@ -258,13 +258,6 @@ function CreateExam() {
     // AVAILABILITY VALIDATION
     // --------------------------------------------------
 
-    if (publish && !form.startDate) {
-      setError(
-        "Please select the exam start date and time before publishing."
-      );
-      return;
-    }
-
     if (publish && !form.endDate) {
       setError(
         "Please select the exam deadline before publishing."
@@ -1109,6 +1102,7 @@ function CreateExam() {
                       event.target.value
                     )
                   }
+                  max={Number(form.totalMarks) || undefined}
                   className="
                     h-12
                     w-full
@@ -1127,6 +1121,7 @@ function CreateExam() {
                     focus:ring-indigo-500/10
                   "
                 />
+                {Number(form.passingMarks) > Number(form.totalMarks) && <p role="alert" className="mt-2 text-xs font-semibold text-rose-600">Passing marks cannot exceed total marks. Lower the passing marks before saving.</p>}
 
               </div>
 
@@ -1349,7 +1344,7 @@ function CreateExam() {
                   </h3>
 
                   <p className="mt-0.5 text-xs text-slate-400">
-                    Set when the published exam starts and when it expires.
+                    When published, a blank start time uses the time you submit this form.
                   </p>
 
                 </div>
@@ -1393,6 +1388,8 @@ function CreateExam() {
                     focus:ring-indigo-500/10
                   "
                 />
+
+                {!form.startDate && <p className="mt-2 text-xs font-medium text-indigo-600">This exam will start when you submit it.</p>}
 
               </div>
 
@@ -1634,9 +1631,7 @@ function CreateExam() {
 
           </section>
 
-          {/* =================================================
-              SECURITY NOTE
-          ================================================= */}
+          {/* ============================SECURITY NOTE ================================================= */}
 
           <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
 
@@ -1662,9 +1657,7 @@ function CreateExam() {
 
           </div>
 
-          {/* =================================================
-              ACTIONS
-          ================================================= */}
+          {/* =================================================ACTIONS================================================= */}
 
           <div className="sticky bottom-4 z-20 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-2xl backdrop-blur-xl sm:p-4">
 
@@ -1798,9 +1791,7 @@ function CreateExam() {
   );
 }
 
-// ======================================================
 // HELPER
-// ======================================================
 
 function getYearLabel(
   year?: number
@@ -1820,8 +1811,6 @@ function getYearLabel(
   return "BCA";
 }
 
-// ======================================================
 // EXPORT
-// ======================================================
 
 export default CreateExam;

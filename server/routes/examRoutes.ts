@@ -5,6 +5,7 @@ import Exam from "../models/Exam";
 import Question from "../models/Question";
 import Attempt from "../models/Attempt";
 import User from "../models/User";
+import { advanceAttemptTimer } from "../attemptTimer";
 
 import {
   requireAuth,
@@ -163,6 +164,15 @@ router.get(
         return Number(target) === Number(studentValue);
       };
 
+      const examIds = exams.map((exam) => exam._id);
+      const attempts = await Attempt.find({ studentId: student._id, examId: { $in: examIds } })
+        .sort({ createdAt: -1 });
+      const attemptsByExam = new Map<string, typeof attempts>();
+      for (const attempt of attempts) {
+        const key = attempt.examId.toString();
+        attemptsByExam.set(key, [...(attemptsByExam.get(key) || []), attempt]);
+      }
+
       const examsWithStatus =
         exams
           .filter((exam: any) => {
@@ -178,6 +188,10 @@ router.get(
               new Date(exam.endDate).getTime() + retentionPeriodMs;
           })
           .map((exam: any) => {
+            const studentAttempts = attemptsByExam.get(exam._id.toString()) || [];
+            const activeAttempt = studentAttempts.find((attempt) => attempt.status === "IN_PROGRESS");
+            const completedAttempts = studentAttempts.filter((attempt) => attempt.status !== "IN_PROGRESS");
+            const allowedAttempts = Math.max(1, Number(exam.allowedAttempts || 1));
             let availabilityStatus =
               "ACTIVE";
 
@@ -204,6 +218,10 @@ router.get(
             return {
               ...exam.toObject(),
               availabilityStatus,
+              attemptsUsed: completedAttempts.length,
+              attemptsRemaining: Math.max(0, allowedAttempts - completedAttempts.length),
+              activeAttemptId: activeAttempt?.status === "IN_PROGRESS" ? activeAttempt._id : null,
+              activeAttemptPaused: activeAttempt?.status === "IN_PROGRESS" ? Boolean(activeAttempt.timerPaused) : false,
             };
           });
 
@@ -488,8 +506,7 @@ router.post(
         parsedTotalMarks
       ) {
         return res.status(400).json({
-          message:
-            "Passing marks cannot exceed total marks",
+          message: `Passing marks (${parsedPassingMarks}) cannot exceed total marks (${parsedTotalMarks}). Lower the passing marks and try again.`,
         });
       }
 
@@ -603,14 +620,14 @@ router.post(
         }
       }
 
-      if (
-        Boolean(published) &&
-        (!parsedStartDate ||
-          !parsedEndDate)
-      ) {
+      if (Boolean(published) && !parsedStartDate) {
+        parsedStartDate = new Date();
+      }
+
+      if (Boolean(published) && !parsedEndDate) {
         return res.status(400).json({
           message:
-            "Published exams require a start date and deadline",
+            "Published exams require a deadline",
         });
       }
 
@@ -1062,8 +1079,7 @@ router.put(
         exam.totalMarks
       ) {
         return res.status(400).json({
-          message:
-            "Passing marks cannot exceed total marks",
+          message: `Passing marks (${exam.passingMarks}) cannot exceed total marks (${exam.totalMarks}). Lower the passing marks and try again.`,
         });
       }
 
@@ -1204,18 +1220,6 @@ router.put(
         }
       }
 
-      if (
-        exam.startDate &&
-        exam.endDate &&
-        exam.endDate <=
-          exam.startDate
-      ) {
-        return res.status(400).json({
-          message:
-            "End date must be after start date",
-        });
-      }
-
       /* -----------------------------------------
          OTHER SETTINGS
       ----------------------------------------- */
@@ -1258,14 +1262,21 @@ router.put(
           Boolean(published);
       }
 
-      if (
-        exam.published &&
-        (!exam.startDate ||
-          !exam.endDate)
-      ) {
+      if (exam.published && !exam.startDate && exam.endDate) {
+        exam.startDate = new Date();
+      }
+
+      if (exam.published && !exam.endDate) {
         return res.status(400).json({
           message:
-            "Published exams require a start date and deadline",
+            "Published exams require a deadline",
+        });
+      }
+
+      if (exam.startDate && exam.endDate && exam.endDate <= exam.startDate) {
+        return res.status(400).json({
+          message:
+            "End date must be after start date",
         });
       }
 
@@ -1556,18 +1567,6 @@ router.post(
           createdAt: -1,
         });
 
-      if (
-        existingAttempts.some(
-          (attempt) =>
-            attempt.proctoringDisqualified
-        )
-      ) {
-        return res.status(403).json({
-          message:
-            "You cannot retake this exam because the previous attempt was ended for repeated focus losses",
-        });
-      }
-
       /* -----------------------------------------
          CLOSE EXPIRED ACTIVE ATTEMPTS
       ----------------------------------------- */
@@ -1576,20 +1575,8 @@ router.post(
         const existingAttempt of
           existingAttempts
       ) {
-        if (
-          existingAttempt.status ===
-            "IN_PROGRESS" &&
-          new Date() >=
-            new Date(
-              existingAttempt.endTime
-            )
-        ) {
-          existingAttempt.status =
-            "TIMED_OUT";
-
-          existingAttempt.submittedAt =
-            existingAttempt.endTime;
-
+        if (existingAttempt.status === "IN_PROGRESS") {
+          advanceAttemptTimer(existingAttempt, exam);
           await existingAttempt.save();
         }
       }
@@ -1656,6 +1643,12 @@ router.post(
 
             tabSwitchCount:
               activeAttempt.tabSwitchCount,
+
+            remainingSeconds:
+              activeAttempt.remainingSeconds,
+
+            timerPaused:
+              activeAttempt.timerPaused,
           },
 
           exam: {
@@ -1892,6 +1885,12 @@ router.post(
           startTime,
 
           endTime,
+
+          remainingSeconds: Math.max(0, Math.floor((endTime.getTime() - startTime.getTime()) / 1000)),
+
+          timerPaused: false,
+
+          lastHeartbeatAt: startTime,
 
           submittedAt:
             null,

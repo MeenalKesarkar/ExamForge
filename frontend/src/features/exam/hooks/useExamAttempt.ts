@@ -51,6 +51,7 @@ export function useExamAttempt() {
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [timerPaused, setTimerPaused] = useState(false);
   const [result, setResult] = useState<ExamResult | null>(null);
   const [, setResultsAvailable] = useState(false);
   const [submittedStatus, setSubmittedStatus] = useState<"SUBMITTED" | "TIMED_OUT" | "EVALUATED" | null>(null);
@@ -89,6 +90,7 @@ export function useExamAttempt() {
       serverOffsetRef.current = new Date(loaded.serverNow).getTime() - Date.now();
       const remaining = loaded.remainingSeconds ?? Math.floor((new Date(loaded.attempt.endTime).getTime() - (Date.now() + serverOffsetRef.current)) / 1000);
       setRemainingSeconds(Math.max(0, remaining));
+      setTimerPaused(Boolean(loaded.timerPaused ?? loaded.attempt.timerPaused));
 
       if (loaded.attempt.status !== "IN_PROGRESS") {
         setSubmittedStatus(loaded.attempt.status);
@@ -165,18 +167,67 @@ export function useExamAttempt() {
   }, [attempt, attemptId, answers, exam, navigate, questions.length, submitting]);
 
   useEffect(() => {
-    if (!attempt || attempt.status !== "IN_PROGRESS" || submittedStatus) return;
+    if (!attempt || attempt.status !== "IN_PROGRESS" || submittedStatus || timerPaused) return;
     const interval = window.setInterval(() => {
-      const endTime = new Date(attempt.endTime).getTime();
-      const seconds = Math.max(0, Math.floor((endTime - (Date.now() + serverOffsetRef.current)) / 1000));
+      const seconds = Math.max(0, remainingSeconds - 1);
       setRemainingSeconds(seconds);
       if (seconds <= 0 && !autoSubmitStartedRef.current) {
         autoSubmitStartedRef.current = true;
         void submitExam(true);
       }
-    }, 250);
+    }, 1000);
     return () => window.clearInterval(interval);
-  }, [attempt, submitExam, submittedStatus]);
+  }, [attempt, remainingSeconds, submitExam, submittedStatus, timerPaused]);
+
+  useEffect(() => {
+    if (!attemptId || !attempt || attempt.status !== "IN_PROGRESS" || submittedStatus || timerPaused) return;
+    const syncTimer = async () => {
+      try {
+        const response = await fetch(`${API_URL}/attempts/${attemptId}/heartbeat`, {
+          method: "PATCH", credentials: "include",
+        });
+        if (!response.ok) return;
+        const data = await response.json() as { remainingSeconds?: number; timerPaused?: boolean; status?: AttemptData["status"]; serverNow?: string };
+        if (data.status && data.status !== "IN_PROGRESS") {
+          await loadAttempt();
+          return;
+        }
+        if (typeof data.remainingSeconds === "number") setRemainingSeconds(data.remainingSeconds);
+        if (data.serverNow) serverOffsetRef.current = new Date(data.serverNow).getTime() - Date.now();
+        if (data.timerPaused) setTimerPaused(true);
+      } catch (syncError) {
+        console.error("Exam timer sync error:", syncError);
+      }
+    };
+    const interval = window.setInterval(() => void syncTimer(), 5000);
+    const pauseOnExit = () => {
+      void fetch(`${API_URL}/attempts/${attemptId}/pause`, {
+        method: "PATCH", credentials: "include", keepalive: true,
+      });
+    };
+    window.addEventListener("pagehide", pauseOnExit);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("pagehide", pauseOnExit);
+    };
+  }, [attempt, attemptId, loadAttempt, submittedStatus, timerPaused]);
+
+  const resumeTimer = useCallback(async () => {
+    if (!attemptId) return;
+    try {
+      const response = await fetch(`${API_URL}/attempts/${attemptId}/resume`, {
+        method: "PATCH", credentials: "include",
+      });
+      const data = await response.json().catch(() => ({})) as { message?: string; remainingSeconds?: number; serverNow?: string };
+      if (!response.ok) throw new Error(data.message || "Unable to resume this exam.");
+      if (typeof data.remainingSeconds === "number") setRemainingSeconds(data.remainingSeconds);
+      if (data.serverNow) serverOffsetRef.current = new Date(data.serverNow).getTime() - Date.now();
+      setTimerPaused(false);
+      setError("");
+    } catch (resumeError) {
+      setError(resumeError instanceof Error ? resumeError.message : "Unable to resume this exam.");
+    }
+  }, [attemptId]);
 
   const saveAnswer = useCallback(async (questionId: string, selectedAnswers: string[]) => {
     if (!attemptId || !attempt || attempt.status !== "IN_PROGRESS") return;
@@ -242,9 +293,9 @@ export function useExamAttempt() {
               : current);
             if (data.terminated) {
               setProctoringDisqualified(true);
-              setSubmittedStatus("TIMED_OUT");
+              setSubmittedStatus("SUBMITTED");
               setAttempt((current) => current
-                ? { ...current, status: "TIMED_OUT", proctoringDisqualified: true }
+                ? { ...current, status: "SUBMITTED", proctoringDisqualified: true }
                 : current);
             } else {
               setFocusWarning(
@@ -299,11 +350,12 @@ export function useExamAttempt() {
   return {
     loading, submitting, error, attempt, exam, questions, answers,
     currentIndex, setCurrentIndex, remainingSeconds, result, submittedStatus,
+    timerPaused, resumeTimer,
     focusWarning, proctoringDisqualified,
     flaggedQuestions, savingQuestionId, currentQuestion, currentAnswers,
     answeredCount, unansweredCount, flaggedCount, progress, isLowTime,
     isCriticalTime, tabSwitchCount: attempt?.tabSwitchCount ?? 0,
     handleAnswerChange, toggleFlag, submitExam,
-    returnToDashboard: () => navigate("/student"),
+    returnToDashboard: () => navigate("/student", { replace: true }),
   };
 }

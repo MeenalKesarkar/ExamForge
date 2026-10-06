@@ -131,18 +131,7 @@ export const requireAuth = async (
           token as string,
           accessTokenSecret
         ) as TokenPayload;
-    } catch (error) {
-      if (
-        token &&
-        !(error instanceof jwt.TokenExpiredError)
-      ) {
-        res.status(401).json({
-          message:
-            "Access token is invalid or expired",
-        });
-        return;
-      }
-
+    } catch {
       const refreshToken =
         req.cookies?.[REFRESH_TOKEN_COOKIE];
       const refreshTokenSecret =

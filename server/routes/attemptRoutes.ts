@@ -10,6 +10,7 @@ import Exam from "../models/Exam";
 import Question, {
   IQuestion,
 } from "../models/Question";
+import { advanceAttemptTimer, startAttemptTimer } from "../attemptTimer";
 
 import {
   requireAuth,
@@ -187,7 +188,6 @@ const calculateScore = async (
       : 0;
 
   const passed =
-    !attempt.proctoringDisqualified &&
     score >=
     Number(exam.passingMarks || 0);
 
@@ -260,11 +260,13 @@ const closeExpiredAttempt = async (
   attempt: IAttempt,
   exam: any
 ): Promise<boolean> => {
-  if (
-    attempt.status !== "IN_PROGRESS" ||
-    new Date() <
-      getEffectiveEndTime(attempt, exam)
-  ) {
+  if (attempt.status !== "IN_PROGRESS") {
+    return false;
+  }
+
+  const timer = advanceAttemptTimer(attempt, exam);
+  if (!timer.expired) {
+    await attempt.save();
     return false;
   }
 
@@ -276,8 +278,7 @@ const closeExpiredAttempt = async (
 
   attempt.status = "TIMED_OUT";
 
-  attempt.submittedAt =
-    getEffectiveEndTime(attempt, exam);
+  attempt.submittedAt = new Date();
 
   attempt.score =
     result.score;
@@ -478,6 +479,64 @@ router.get(
 );
 
 /* =========================================================
+   PAUSE / RESUME EXAM TIMER
+========================================================= */
+
+router.patch("/:attemptId/pause", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const attempt = await Attempt.findById(getParam(req.params.attemptId));
+    if (!attempt) return res.status(404).json({ message: "Attempt not found" });
+    if (!req.user || req.user.role !== "student" || req.user.userId !== attempt.studentId.toString()) return res.status(403).json({ message: "You do not have access to this attempt" });
+    const exam = await Exam.findById(attempt.examId);
+    if (!exam) return res.status(404).json({ message: "Exam not found" });
+    if (attempt.status !== "IN_PROGRESS") return res.status(409).json({ message: "This attempt is no longer active" });
+    const timer = advanceAttemptTimer(attempt, exam);
+    if (timer.expired) await closeExpiredAttempt(attempt, exam);
+    else { attempt.timerPaused = true; attempt.lastHeartbeatAt = null; await attempt.save(); }
+    return res.json({ remainingSeconds: attempt.remainingSeconds ?? 0, timerPaused: attempt.status === "IN_PROGRESS" });
+  } catch (error) {
+    console.error("Pause attempt timer error:", error);
+    return res.status(500).json({ message: "Unable to pause exam timer" });
+  }
+});
+
+router.patch("/:attemptId/resume", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const attempt = await Attempt.findById(getParam(req.params.attemptId));
+    if (!attempt) return res.status(404).json({ message: "Attempt not found" });
+    if (!req.user || req.user.role !== "student" || req.user.userId !== attempt.studentId.toString()) return res.status(403).json({ message: "You do not have access to this attempt" });
+    const exam = await Exam.findById(attempt.examId);
+    if (!exam) return res.status(404).json({ message: "Exam not found" });
+    if (attempt.status !== "IN_PROGRESS") return res.status(409).json({ message: "This attempt is no longer active" });
+    const timer = advanceAttemptTimer(attempt, exam);
+    if (timer.expired) { await closeExpiredAttempt(attempt, exam); return res.status(409).json({ message: "The exam time has ended" }); }
+    startAttemptTimer(attempt);
+    await attempt.save();
+    return res.json({ remainingSeconds: attempt.remainingSeconds, timerPaused: false, serverNow: new Date() });
+  } catch (error) {
+    console.error("Resume attempt timer error:", error);
+    return res.status(500).json({ message: "Unable to resume exam timer" });
+  }
+});
+
+router.patch("/:attemptId/heartbeat", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const attempt = await Attempt.findById(getParam(req.params.attemptId));
+    if (!attempt) return res.status(404).json({ message: "Attempt not found" });
+    if (!req.user || req.user.role !== "student" || req.user.userId !== attempt.studentId.toString()) return res.status(403).json({ message: "You do not have access to this attempt" });
+    const exam = await Exam.findById(attempt.examId);
+    if (!exam) return res.status(404).json({ message: "Exam not found" });
+    if (attempt.status !== "IN_PROGRESS") return res.status(409).json({ message: "This attempt is no longer active" });
+    const timer = advanceAttemptTimer(attempt, exam);
+    if (timer.expired) await closeExpiredAttempt(attempt, exam); else await attempt.save();
+    return res.json({ remainingSeconds: attempt.remainingSeconds ?? 0, timerPaused: attempt.status === "IN_PROGRESS" && Boolean(attempt.timerPaused), status: attempt.status, serverNow: new Date() });
+  } catch (error) {
+    console.error("Attempt heartbeat error:", error);
+    return res.status(500).json({ message: "Unable to sync exam timer" });
+  }
+});
+
+/* =========================================================
    GET SINGLE ATTEMPT
    GET /api/attempts/:attemptId
 ========================================================= */
@@ -543,23 +602,13 @@ router.get(
       );
 
       const now = new Date();
-
-      const remainingSeconds =
-        attempt.status ===
-        "IN_PROGRESS"
-          ? Math.max(
-              0,
-              Math.floor(
-                (
-                  getEffectiveEndTime(
-                    attempt,
-                    exam
-                  ).getTime() -
-                  now.getTime()
-                ) / 1000
-              )
-            )
-          : 0;
+      const timer = attempt.status === "IN_PROGRESS"
+        ? advanceAttemptTimer(attempt, exam, now)
+        : { remainingSeconds: 0, paused: true, expired: true };
+      if (attempt.status === "IN_PROGRESS") await attempt.save();
+      if (timer.expired && attempt.status === "IN_PROGRESS") {
+        await closeExpiredAttempt(attempt, exam);
+      }
 
       const questions: IQuestion[] =
         await Question.find({
@@ -692,6 +741,7 @@ router.get(
             attempt.tabSwitchCount,
           proctoringDisqualified:
             attempt.proctoringDisqualified,
+          timerPaused: timer.paused,
         },
 
         exam: {
@@ -719,7 +769,8 @@ router.get(
 
         serverNow: now,
 
-        remainingSeconds,
+        remainingSeconds: attempt.status === "IN_PROGRESS" ? timer.remainingSeconds : 0,
+        timerPaused: attempt.status === "IN_PROGRESS" ? timer.paused : true,
 
         result,
         resultsAvailable,
@@ -1036,14 +1087,15 @@ router.patch(
 
       if (terminated) {
         attempt.proctoringDisqualified = true;
-        attempt.status = "TIMED_OUT";
+        attempt.status = "SUBMITTED";
+        attempt.submissionReason = "SECURITY_VIOLATION";
         attempt.submittedAt = new Date();
 
         const result = await calculateScore(attempt, exam);
         attempt.score = result.score;
         attempt.totalMarks = result.totalMarks;
         attempt.percentage = result.percentage;
-        attempt.passed = false;
+        attempt.passed = result.passed;
       }
 
       await attempt.save();

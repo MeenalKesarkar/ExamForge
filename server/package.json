@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only server.ts",
+    "dev": "ts-node-dev --respawn --transpile-only --quiet server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "set-passwords": "ts-node scripts/setPasswords.ts",
@@ -24,15 +24,19 @@
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^7.6.0",
     "mongoose": "^9.10.2",
-    "nodemailer": "^10.0.10"
+    "multer": "^2.4.0",
+    "nodemailer": "^10.0.10",
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.3.0",
     "@types/node": "^26.6.2",
     "@types/nodemailer": "^8.0.2",
+    "@types/pdf-parse": "^1.1.5",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",

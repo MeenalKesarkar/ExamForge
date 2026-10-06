@@ -71,7 +71,7 @@ export default function AdminDashboard() {
       setError(err instanceof Error ? err.message : "Could not update this request.");
     } finally { setBusy(null); }
   };
-  const handleLogout = async () => { await logoutUser(); dispatch(logout()); navigate("/", { replace: true }); };
+  const handleLogout = () => { dispatch(logout()); navigate("/", { replace: true }); void logoutUser(); };
   const studentCount = requests.filter((request) => request.role === "student").length;
   const instructorCount = requests.length - studentCount;
 

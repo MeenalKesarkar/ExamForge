@@ -235,10 +235,12 @@ export const refreshSession =
       );
 
     if (!response.ok) {
-      throw new Error(
+      const error = new Error(
         result?.message ||
           "Session expired."
-      );
+      ) as Error & { status?: number };
+      error.status = response.status;
+      throw error;
     }
 
     if (!result?.user) {
