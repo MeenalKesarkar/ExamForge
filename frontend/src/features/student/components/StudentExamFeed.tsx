@@ -25,6 +25,7 @@ interface StudentExamFeedProps {
   formatDateTime: (value?: string | null) => string;
 }
 
+// StudentExamFeed component
 export default function StudentExamFeed({
   loading, error, exams, filteredExams, search, onSearchChange,
   filter, onFilterChange, startingExamId, getExamAccent, onStartExam,
@@ -203,9 +204,7 @@ export default function StudentExamFeed({
                         const isStarting =
                           startingExamId ===
                           exam._id;
-                        const maxAttempts =
-                          exam.allowedAttempts ||
-                          2;
+                        const maxAttempts = 1;
                         /*
                          * Server returns availabilityStatus.
                          *

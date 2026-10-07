@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { AttemptData, AttemptResponse, ExamData, ExamQuestion, ExamResult } from "../types";
-import { API_URL } from "../../../apiConfig";
+import { API_URL } from "../../../config/apiConfig";
 const MAX_FOCUS_LOSSES = 3;
 
 interface SubmitResponse {

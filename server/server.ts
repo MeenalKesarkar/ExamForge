@@ -1,68 +1,37 @@
-// ======================================================
 // EXAMFORGE BACKEND - SERVER
-// ======================================================
 
 import dns from "node:dns";
-
-// ======================================================
 // MONGODB ATLAS SRV DNS
-// ======================================================
 
 dns.setServers([
   "8.8.8.8",
   "8.8.4.4",
 ]);
-
-// ======================================================
 // ENVIRONMENT
-// ======================================================
 
-import "dotenv/config";
-
-// ======================================================
-// EXPRESS
-// ======================================================
+import "dotenv/config";// EXPRESS
 
 import express, {
   Request,
   Response,
   NextFunction,
-} from "express";
-
-// ======================================================
-// MIDDLEWARE
-// ======================================================
+} from "express";// MIDDLEWARE
 
 import cors from "cors";
-import cookieParser from "cookie-parser";
+import cookieParser from "cookie-parser";// DATABASE
 
-// ======================================================
-// DATABASE
-// ======================================================
-
-import mongoose from "mongoose";
-
-// ======================================================
+import mongoose from "mongoose";import Attempt from "./models/Attempt";
 // ROUTES
-// ======================================================
 
-import authRoutes from "./routes/authRoutes";
-import profileRoutes from "./routes/profileRoutes";
-import examRoutes from "./routes/examRoutes";
-import attemptRoutes from "./routes/attemptRoutes";
-import questionRoutes from "./routes/questionRoutes";
-import questionPdfRoutes from "./routes/questionPdfRoutes";
-import adminRoutes from "./routes/adminRoutes";
+import authRoutes from "./routes/auth";
+import profileRoutes from "./routes/profiles";
+import examRoutes from "./routes/exams";
+import attemptRoutes from "./routes/attempts";
+import questionRoutes from "./routes/questions";
+import questionPdfRoutes from "./routes/questions/pdf";
+import adminRoutes from "./routes/admin";// APP
 
-// ======================================================
-// APP
-// ======================================================
-
-const app = express();
-
-// ======================================================
-// CONFIGURATION
-// ======================================================
+const app = express();// CONFIGURATION
 
 const PORT = Number(
   process.env.PORT || 5000
@@ -73,11 +42,7 @@ const MONGO_URI =
 
 const FRONTEND_URL =
   process.env.FRONTEND_URL ||
-  "http://localhost:5173";
-
-// ======================================================
-// ENVIRONMENT CHECK
-// ======================================================
+  "http://localhost:5173";// ENVIRONMENT CHECK
 
 if (!MONGO_URI) {
   console.error(
@@ -85,11 +50,7 @@ if (!MONGO_URI) {
   );
 
   process.exit(1);
-}
-
-// ======================================================
-// CORS
-// ======================================================
+}// CORS
 
 app.use(
   cors({
@@ -112,11 +73,7 @@ app.use(
       "Accept",
     ],
   })
-);
-
-// ======================================================
-// BODY PARSERS
-// ======================================================
+);// BODY PARSERS
 
 app.use(
   express.json({
@@ -129,19 +86,11 @@ app.use(
     extended: true,
     limit: "5mb",
   })
-);
-
-// ======================================================
-// COOKIE PARSER
-// ======================================================
+);// COOKIE PARSER
 
 app.use(
   cookieParser()
-);
-
-// ======================================================
-// REQUEST LOGGER
-// ======================================================
+);// REQUEST LOGGER
 
 app.use(
   (
@@ -155,11 +104,7 @@ app.use(
 
     next();
   }
-);
-
-// ======================================================
-// ROOT HEALTH CHECK
-// ======================================================
+);// ROOT HEALTH CHECK
 
 app.get(
   "/",
@@ -177,11 +122,7 @@ app.get(
         new Date().toISOString(),
     });
   }
-);
-
-// ======================================================
-// API HEALTH CHECK
-// ======================================================
+);// API HEALTH CHECK
 
 app.get(
   "/api",
@@ -196,11 +137,7 @@ app.get(
       status: "OK",
     });
   }
-);
-
-// ======================================================
-// API ROUTES
-// ======================================================
+);// API ROUTES
 
 // ------------------------------------------------------
 // Authentication
@@ -256,10 +193,7 @@ app.use(
   "/api/questions",
   questionRoutes
 );
-
-// ======================================================
 // API 404 HANDLER
-// ======================================================
 
 app.use(
   "/api",
@@ -278,11 +212,7 @@ app.use(
         req.originalUrl,
     });
   }
-);
-
-// ======================================================
-// GLOBAL ERROR HANDLER
-// ======================================================
+);// GLOBAL ERROR HANDLER
 
 app.use(
   (
@@ -311,11 +241,7 @@ app.use(
         "Internal server error",
     });
   }
-);
-
-// ======================================================
-// MONGODB CONNECTION
-// ======================================================
+);// MONGODB CONNECTION
 
 const connectDatabase =
   async (): Promise<void> => {
@@ -413,11 +339,7 @@ const connectDatabase =
 
       process.exit(1);
     }
-  };
-
-// ======================================================
-// START SERVER
-// ======================================================
+  };// START SERVER
 
 const startServer =
   async (): Promise<void> => {
@@ -426,6 +348,7 @@ const startServer =
     // --------------------------------------------------
 
     await connectDatabase();
+    await Attempt.createIndexes();
 
     // --------------------------------------------------
     // Start Express
@@ -499,11 +422,7 @@ const startServer =
         console.log("");
       }
     );
-  };
-
-// ======================================================
-// GRACEFUL SHUTDOWN
-// ======================================================
+  };// GRACEFUL SHUTDOWN
 
 const gracefulShutdown =
   async (
@@ -533,11 +452,7 @@ const gracefulShutdown =
 
       process.exit(1);
     }
-  };
-
-// ======================================================
-// PROCESS SIGNALS
-// ======================================================
+  };// PROCESS SIGNALS
 
 process.on(
   "SIGINT",
@@ -555,11 +470,7 @@ process.on(
       "SIGTERM"
     );
   }
-);
-
-// ======================================================
-// UNHANDLED PROMISE REJECTION
-// ======================================================
+);// UNHANDLED PROMISE REJECTION
 
 process.on(
   "unhandledRejection",
@@ -571,11 +482,7 @@ process.on(
       reason
     );
   }
-);
-
-// ======================================================
-// UNCAUGHT EXCEPTION
-// ======================================================
+);// UNCAUGHT EXCEPTION
 
 process.on(
   "uncaughtException",
@@ -587,11 +494,7 @@ process.on(
       error
     );
   }
-);
-
-// ======================================================
-// RUN SERVER
-// ======================================================
+);// RUN SERVER
 
 startServer().catch(
   (

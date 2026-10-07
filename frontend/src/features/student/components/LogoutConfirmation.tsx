@@ -7,6 +7,7 @@ interface LogoutConfirmationProps {
   onConfirm: () => void;
 }
 
+// LogoutConfirmation component
 export default function LogoutConfirmation({
   open, setOpen, onConfirm,
 }: LogoutConfirmationProps) {

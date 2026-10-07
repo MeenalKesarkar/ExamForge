@@ -1,439 +1,6 @@
 import pdfParse = require("pdf-parse");
-
-export interface PdfQuestionDraft {
-  questionNumber: string;
-  questionText: string;
-  type: "single" | "multi";
-  options: string[];
-  correctAnswers: string[];
-  marks: number;
-  explanation: string;
-  difficulty: "easy" | "medium" | "hard";
-}
-
-export interface PdfQuestionIssue {
-  questionNumber?: string;
-  questionText?: string;
-  reason: string;
-}
-
-interface RawQuestion {
-  number: string;
-  lines: string[];
-}
-
-interface ParsedSection {
-  draft?: PdfQuestionDraft;
-  issue?: PdfQuestionIssue;
-}
-
-/*
-|--------------------------------------------------------------------------
-| REGULAR EXPRESSIONS
-|--------------------------------------------------------------------------
-*/
-
-/*
- * Question headers:
- *
- * 1. Question text
- * 2) Question text
- * 3: Question text
- * 4- Question text
- * Question 5: Question text
- */
-const questionHeader =
-  /^\s*(?:question\s*)?(\d{1,4})\s*[.):\-]\s*(.*)$/i;
-
-/*
- * Option formats:
- *
- * A) useState
- * A. useState
- * A: useState
- * A- useState
- * (A) useState
- */
-const optionLine =
-  /^\s*\(?([A-J])\)?\s*[.)\-:]\s*(.*)$/i;
-
-/*
- * Correct answer formats:
- *
- * Correct Answer: B
- * Correct Answer: B, C
- * Correct Option: B
- * Answer: B
- * Ans: B
- */
-const answerLine =
-  /^\s*(?:correct\s*(?:answer|option)|answer|ans)\s*[:\-]\s*(.*?)\s*$/i;
-
-/*
- * Question type:
- *
- * Type: single
- * Type: multi
- * Question Type: single
- * Question Type: multiple choice
- */
-const typeLine =
-  /^\s*(?:question\s*)?type\s*[:\-]\s*(single|multi|multiple(?:\s+choice)?|single(?:\s+choice)?)\s*$/i;
-
-/*
- * Difficulty:
- *
- * Difficulty: easy
- * Difficulty: medium
- * Difficulty: hard
- */
-const difficultyPattern =
-  /\bdifficulty\s*:\s*(easy|medium|hard)\b/i;
-
-/*
- * Marks:
- *
- * Mark: 1
- * Marks: 1
- * Marks: 2.5
- */
-const marksPattern =
-  /\bmarks?\s*:\s*(\d+(?:\.\d+)?)\b/i;
-
-/*
- * Explanation:
- *
- * Explanation: useEffect is used for side effects.
- *
- * Stops before Difficulty or Order if they occur later.
- */
-const explanationPattern =
-  /\bexplanation\s*:\s*(.*?)(?=\s+(?:difficulty|order)\s*:|\s*$)/i;
-
-/*
- * Order:
- *
- * Order: 1
- * Order: 10
- * Question Order: 10
- */
-const orderPattern =
-  /\b(?:question\s+)?order\s*:\s*\d+\b/i;
-
-/*
-|--------------------------------------------------------------------------
-| TEXT NORMALIZATION
-|--------------------------------------------------------------------------
-*/
-
-function normalizeText(value: string): string {
-  return value
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/*
-|--------------------------------------------------------------------------
-| ANSWER TOKENIZATION
-|--------------------------------------------------------------------------
-*/
-
-function answerTokens(value: string): string[] {
-  return value
-    .replace(/\b(?:and|or)\b/gi, ",")
-    .split(/[,;/|\n]+/)
-    .map((part) =>
-      part
-        .trim()
-        .replace(/^(?:option|choice)\s+/i, "")
-        .replace(/^[([]/g, "")
-        .replace(/[.)\]]$/g, "")
-        .trim()
-    )
-    .filter(Boolean);
-}
-
-/*
-|--------------------------------------------------------------------------
-| AUTOMATIC DIFFICULTY
-|--------------------------------------------------------------------------
-|
-| If the PDF explicitly contains:
-|
-| Difficulty: easy
-| Difficulty: medium
-| Difficulty: hard
-|
-| that value is always preferred.
-|
-| If no difficulty is supplied by the PDF, we estimate it from
-| the question text and explanation.
-|
-| This is a heuristic, not a perfect semantic classifier.
-|--------------------------------------------------------------------------
-*/
-
-function inferDifficulty(
-  questionText: string,
-  explanation: string,
-  options: string[]
-): "easy" | "medium" | "hard" {
-  const text =
-    `${questionText} ${explanation}`.toLowerCase();
-
-  let score = 0;
-
-  /*
-   * Basic / recall-oriented wording.
-   */
-  const easyPatterns = [
-    /\bwhat\s+is\b/i,
-    /\bwhat\s+are\b/i,
-    /\bwhich\s+is\b/i,
-    /\bwhich\s+of\s+the\s+following\b/i,
-    /\bwho\s+is\b/i,
-    /\bwhen\s+was\b/i,
-    /\bwhere\s+is\b/i,
-    /\bidentify\b/i,
-    /\bdefine\b/i,
-    /\bdefinition\b/i,
-    /\bmeaning\b/i,
-    /\bused\s+for\b/i,
-    /\bknown\s+as\b/i,
-    /\bstands\s+for\b/i,
-    /\bsyntax\b/i,
-  ];
-
-  for (const pattern of easyPatterns) {
-    if (pattern.test(text)) {
-      score -= 1;
-    }
-  }
-
-  /*
-   * Medium / application-oriented wording.
-   */
-  const mediumPatterns = [
-    /\bhow\s+does\b/i,
-    /\bhow\s+do\b/i,
-    /\bhow\s+to\b/i,
-    /\bwhich\s+method\b/i,
-    /\bwhich\s+approach\b/i,
-    /\bwhich\s+technique\b/i,
-    /\bchoose\b/i,
-    /\bselect\b/i,
-    /\bimplement\b/i,
-    /\bapply\b/i,
-    /\bcalculate\b/i,
-    /\bsolve\b/i,
-    /\bexample\b/i,
-    /\bscenario\b/i,
-    /\bcase\b/i,
-    /\bcomplete(ly)?\s+update\b/i,
-    /\bconfigure\b/i,
-  ];
-
-  for (const pattern of mediumPatterns) {
-    if (pattern.test(text)) {
-      score += 1;
-    }
-  }
-
-  /*
-   * Hard / analytical wording.
-   */
-  const hardPatterns = [
-    /\banaly[sz]e\b/i,
-    /\banalysis\b/i,
-    /\bevaluate\b/i,
-    /\bevaluation\b/i,
-    /\bcompare\b/i,
-    /\bcontrast\b/i,
-    /\bjustify\b/i,
-    /\bderive\b/i,
-    /\bproof\b/i,
-    /\bprove\b/i,
-    /\boptimi[sz]e\b/i,
-    /\boptimization\b/i,
-    /\bcomplexity\b/i,
-    /\btime\s+complexity\b/i,
-    /\bspace\s+complexity\b/i,
-    /\brecursive\b/i,
-    /\barchitecture\b/i,
-    /\btrade[- ]?off\b/i,
-    /\bdebug\b/i,
-    /\bdebugging\b/i,
-    /\bwhy\s+would\b/i,
-    /\bwhy\s+is\b/i,
-    /\bwhat\s+would\s+happen\b/i,
-    /\bmost\s+appropriate\b/i,
-    /\bbest\s+approach\b/i,
-    /\bmultiple\s+steps\b/i,
-  ];
-
-  for (const pattern of hardPatterns) {
-    if (pattern.test(text)) {
-      score += 2;
-    }
-  }
-
-  /*
-   * Longer questions generally require more processing.
-   */
-  if (questionText.length > 180) {
-    score += 1;
-  }
-
-  if (questionText.length > 350) {
-    score += 1;
-  }
-
-  /*
-   * More options can indicate a more involved question,
-   * but only slightly.
-   */
-  if (options.length >= 6) {
-    score += 1;
-  }
-
-  /*
-   * Final classification.
-   */
-  if (score <= -1) {
-    return "easy";
-  }
-
-  if (score >= 3) {
-    return "hard";
-  }
-
-  return "medium";
-}
-
-/*
-|--------------------------------------------------------------------------
-| EXTRACT METADATA
-|--------------------------------------------------------------------------
-*/
-
-function extractMetadataFromText(value: string): {
-  text: string;
-  marks?: number;
-  explanation?: string;
-  difficulty?: "easy" | "medium" | "hard";
-} {
-  let text = value;
-
-  let marks:
-    | number
-    | undefined;
-
-  let explanation:
-    | string
-    | undefined;
-
-  let difficulty:
-    | "easy"
-    | "medium"
-    | "hard"
-    | undefined;
-
-  /*
-   * MARKS
-   */
-  const marksMatch =
-    text.match(marksPattern);
-
-  if (marksMatch) {
-    const parsedMarks =
-      Number(marksMatch[1]);
-
-    if (
-      Number.isFinite(parsedMarks) &&
-      parsedMarks > 0
-    ) {
-      marks = parsedMarks;
-    }
-  }
-
-  /*
-   * DIFFICULTY
-   */
-  const difficultyMatch =
-    text.match(
-      difficultyPattern
-    );
-
-  if (difficultyMatch) {
-    difficulty =
-      difficultyMatch[1].toLowerCase() as
-        | "easy"
-        | "medium"
-        | "hard";
-  }
-
-  /*
-   * EXPLANATION
-   */
-  const explanationMatch =
-    text.match(
-      explanationPattern
-    );
-
-  if (explanationMatch) {
-    explanation =
-      normalizeText(
-        explanationMatch[1]
-      );
-  }
-
-  /*
-   * REMOVE METADATA FROM QUESTION TEXT
-   *
-   * This is especially important for your problem:
-   *
-   * "Which HTTP method...? Order: 10"
-   *
-   * becomes:
-   *
-   * "Which HTTP method...?"
-   */
-
-  text = text
-    .replace(
-      /\bOptions\s*:\s*/gi,
-      ""
-    )
-    .replace(
-      /\bMarks?\s*:\s*\d+(?:\.\d+)?/gi,
-      ""
-    )
-    .replace(
-      /\bExplanation\s*:\s*.*?(?=\s+(?:Difficulty|Order)\s*:|\s*$)/gi,
-      ""
-    )
-    .replace(
-      /\bDifficulty\s*:\s*(?:easy|medium|hard)\b/gi,
-      ""
-    )
-    .replace(
-      orderPattern,
-      ""
-    );
-
-  return {
-    text: normalizeText(text),
-    marks,
-    explanation,
-    difficulty,
-  };
-}
-
-/*
-|--------------------------------------------------------------------------
-| PARSE QUESTION SECTION
-|--------------------------------------------------------------------------
-*/
+import { type PdfQuestionDraft, type PdfQuestionIssue, type RawQuestion, type ParsedSection, questionHeader, optionLine, answerLine, typeLine, orderPattern, normalizeText, answerTokens, inferDifficulty, extractMetadataFromText } from "./pdfQuestionParserShared";
+export type { PdfQuestionDraft, PdfQuestionIssue } from "./pdfQuestionParserShared";
 
 function parseSection(
   section: RawQuestion
@@ -464,9 +31,7 @@ function parseSection(
 
   let activeOption = -1;
 
-  /*
-   * Process every line.
-   */
+  // Process every line.
   for (
     const sourceLine of section.lines
   ) {
@@ -474,25 +39,12 @@ function parseSection(
       sourceLine.trim();
 
     if (!line) {
-      /*
-       * Blank line ends an option continuation.
-       */
+      // Blank line ends an option continuation.
       activeOption = -1;
       continue;
     }
 
-    /*
-     * Extract metadata from EVERY line.
-     *
-     * PDF extraction frequently puts:
-     *
-     * Marks
-     * Explanation
-     * Difficulty
-     * Order
-     *
-     * on the same line as the question.
-     */
+    // Extract metadata from EVERY line.
     const metadata =
       extractMetadataFromText(line);
 
@@ -521,16 +73,12 @@ function parseSection(
     const cleanedLine =
       metadata.text;
 
-    /*
-     * Metadata-only line.
-     */
+    // Metadata-only line.
     if (!cleanedLine) {
       continue;
     }
 
-    /*
-     * CORRECT ANSWER
-     */
+    // CORRECT ANSWER
     const answerMatch =
       cleanedLine.match(
         answerLine
@@ -545,9 +93,7 @@ function parseSection(
       continue;
     }
 
-    /*
-     * QUESTION TYPE
-     */
+    // QUESTION TYPE
     const typeMatch =
       cleanedLine.match(
         typeLine
@@ -566,9 +112,7 @@ function parseSection(
       continue;
     }
 
-    /*
-     * OPTION
-     */
+    // OPTION
     const optionMatch =
       cleanedLine.match(
         optionLine
@@ -591,9 +135,7 @@ function parseSection(
       continue;
     }
 
-    /*
-     * CONTINUATION OF AN OPTION
-     */
+    // CONTINUATION OF AN OPTION
     if (
       activeOption >= 0 &&
       options[activeOption]
@@ -606,29 +148,20 @@ function parseSection(
           cleanedLine
       );
     } else {
-      /*
-       * OTHERWISE THIS IS QUESTION TEXT.
-       */
+      // OTHERWISE THIS IS QUESTION TEXT.
       questionLines.push(
         cleanedLine
       );
     }
   }
 
-  /*
-   * Build final question text.
-   */
+  // Build final question text.
   const questionText =
     normalizeText(
       questionLines.join(" ")
     );
 
-  /*
-   * Safety cleanup.
-   *
-   * This catches metadata that may have survived because
-   * PDF extraction joined several pieces together.
-   */
+  // Safety cleanup.
   const cleanedQuestionText =
     normalizeText(
       questionText
@@ -654,9 +187,7 @@ function parseSection(
         )
     );
 
-  /*
-   * ISSUE HELPER
-   */
+  // ISSUE HELPER
   const issue = (
     reason: string
   ): ParsedSection => ({
@@ -671,9 +202,7 @@ function parseSection(
     },
   });
 
-  /*
-   * QUESTION TEXT VALIDATION
-   */
+  // QUESTION TEXT VALIDATION
   if (!cleanedQuestionText) {
     return issue(
       "Question text is missing."
@@ -689,9 +218,7 @@ function parseSection(
     );
   }
 
-  /*
-   * OPTIONS VALIDATION
-   */
+  // OPTIONS VALIDATION
   if (
     options.length < 2 ||
     options.length > 10
@@ -711,9 +238,7 @@ function parseSection(
     );
   }
 
-  /*
-   * UNIQUE LABELS
-   */
+  // UNIQUE LABELS
   if (
     new Set(
       options.map(
@@ -726,9 +251,7 @@ function parseSection(
     );
   }
 
-  /*
-   * UNIQUE OPTION TEXT
-   */
+  // UNIQUE OPTION TEXT
   if (
     new Set(
       options.map((option) =>
@@ -741,9 +264,7 @@ function parseSection(
     );
   }
 
-  /*
-   * CORRECT ANSWER VALIDATION
-   */
+  // CORRECT ANSWER VALIDATION
   if (!answerText) {
     return issue(
       "Correct answer is missing; it was not guessed."
@@ -755,12 +276,7 @@ function parseSection(
 
   const correctAnswers =
     tokens.map((token) => {
-      /*
-       * Match by label.
-       *
-       * B
-       * C
-       */
+      // Match by label.
       const label =
         token.match(
           /^([A-J])$/i
@@ -774,11 +290,7 @@ function parseSection(
             label
         );
 
-      /*
-       * Match by exact option text.
-       *
-       * useEffect
-       */
+      // Match by exact option text.
       const byText =
         options.find(
           (option) =>
@@ -792,9 +304,7 @@ function parseSection(
       )?.text || "";
     });
 
-  /*
-   * ANSWER MATCH FAILED
-   */
+  // ANSWER MATCH FAILED
   if (
     !tokens.length ||
     correctAnswers.some(
@@ -806,9 +316,7 @@ function parseSection(
     );
   }
 
-  /*
-   * DUPLICATE CORRECT ANSWERS
-   */
+  // DUPLICATE CORRECT ANSWERS
   if (
     new Set(correctAnswers).size !==
     correctAnswers.length
@@ -818,18 +326,14 @@ function parseSection(
     );
   }
 
-  /*
-   * DETERMINE QUESTION TYPE
-   */
+  // DETERMINE QUESTION TYPE
   const type =
     explicitType ||
     (correctAnswers.length > 1
       ? "multi"
       : "single");
 
-  /*
-   * TYPE VALIDATION
-   */
+  // TYPE VALIDATION
   if (
     (type === "single" &&
       correctAnswers.length !== 1) ||
@@ -841,13 +345,7 @@ function parseSection(
     );
   }
 
-  /*
-   * DIFFICULTY
-   *
-   * 1. Use explicit PDF difficulty if present.
-   *
-   * 2. Otherwise calculate it automatically.
-   */
+  // DIFFICULTY
   const difficulty =
     explicitDifficulty ||
     inferDifficulty(
@@ -858,9 +356,7 @@ function parseSection(
       )
     );
 
-  /*
-   * FINAL QUESTION DRAFT
-   */
+  // FINAL QUESTION DRAFT
   return {
     draft: {
       questionNumber:
@@ -886,11 +382,7 @@ function parseSection(
   };
 }
 
-/*
-|--------------------------------------------------------------------------
-| EXTRACT TEXT FROM PDF
-|--------------------------------------------------------------------------
-*/
+// | EXTRACT TEXT FROM PDF
 
 export async function extractPdfQuestionText(
   buffer: Buffer
@@ -903,11 +395,7 @@ export async function extractPdfQuestionText(
   return result.text || "";
 }
 
-/*
-|--------------------------------------------------------------------------
-| PARSE PDF QUESTIONS
-|--------------------------------------------------------------------------
-*/
+// | PARSE PDF QUESTIONS
 
 export function parsePdfQuestions(
   text: string
@@ -928,9 +416,7 @@ export function parsePdfQuestions(
 
   let previousNumber = 0;
 
-  /*
-   * Identify question sections.
-   */
+  // Identify question sections.
   for (const line of lines) {
     const match =
       line.match(
@@ -941,12 +427,7 @@ export function parsePdfQuestions(
       ? Number(match[1])
       : 0;
 
-    /*
-     * Explicit:
-     *
-     * Question 1:
-     * Question 2:
-     */
+    // Explicit:
     const explicitHeader =
       Boolean(
         match &&
@@ -955,13 +436,7 @@ export function parsePdfQuestions(
           )
       );
 
-    /*
-     * Normal numbered sequence:
-     *
-     * 1.
-     * 2.
-     * 3.
-     */
+    // Normal numbered sequence:
     const startsNext =
       Boolean(
         match &&
@@ -993,9 +468,7 @@ export function parsePdfQuestions(
     }
   }
 
-  /*
-   * No questions found.
-   */
+  // No questions found.
   if (!sections.length) {
     return {
       questions: [],
@@ -1015,9 +488,7 @@ export function parsePdfQuestions(
   const issues: PdfQuestionIssue[] =
     [];
 
-  /*
-   * Parse every question.
-   */
+  // Parse every question.
   for (const section of sections) {
     const parsed =
       parseSection(section);

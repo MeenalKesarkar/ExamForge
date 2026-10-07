@@ -23,6 +23,7 @@ interface ExamQuestionPanelProps {
   onSubmit: () => void;
 }
 
+// ExamQuestionPanel component
 export default function ExamQuestionPanel({
   question,
   index,

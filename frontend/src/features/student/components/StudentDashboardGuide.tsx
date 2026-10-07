@@ -1,5 +1,6 @@
 import { CircleCheck, Timer } from "lucide-react";
 
+// StudentDashboardGuide component
 export default function StudentDashboardGuide({
   loading,
   examCount,

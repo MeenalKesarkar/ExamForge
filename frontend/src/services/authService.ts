@@ -1,6 +1,6 @@
-import type { ForgotPasswordResponse, LoginRequest, LoginResponse, RefreshResponse, RegisterRequest, RegisterResponse, ResetPasswordResponse, VerifyOTPResponse } from "../features/authTypes";
-import { API_URL } from "../apiConfig";
-export type { AccountStatus, AuthUser, ForgotPasswordResponse, LoginRequest, LoginResponse, RefreshResponse, RegisterRequest, RegisterResponse, ResetPasswordResponse, TeachingAssignment, UserRole, VerifyOTPResponse } from "../features/authTypes";
+import type { ForgotPasswordResponse, LoginRequest, LoginResponse, RefreshResponse, RegisterRequest, RegisterResponse, ResetPasswordResponse, VerifyOTPResponse } from "../features/auth/types";
+import { API_URL } from "../config/apiConfig";
+export type { AccountStatus, AuthUser, ForgotPasswordResponse, LoginRequest, LoginResponse, RefreshResponse, RegisterRequest, RegisterResponse, ResetPasswordResponse, TeachingAssignment, UserRole, VerifyOTPResponse } from "../features/auth/types";
 
 // ======================================================
 // EXAMFORGE - AUTH SERVICE

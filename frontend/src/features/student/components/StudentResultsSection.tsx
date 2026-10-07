@@ -7,6 +7,7 @@ interface StudentResultsSectionProps {
   formatDateTime: (value?: string | null) => string;
 }
 
+// StudentResultsSection component
 export default function StudentResultsSection({
   results, loading, formatDateTime,
 }: StudentResultsSectionProps) {

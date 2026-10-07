@@ -1,3 +1,4 @@
+// StudentDashboardFooter component
 export default function StudentDashboardFooter() {
   return (
     <footer className="mt-16 border-t border-slate-200 bg-white">

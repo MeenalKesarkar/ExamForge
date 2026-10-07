@@ -20,6 +20,7 @@ interface StudentDashboardHeaderProps {
   navigate: (path: string) => void;
 }
 
+// StudentDashboardHeader component
 export default function StudentDashboardHeader({
   user, exams, isNotificationsOpen, setIsNotificationsOpen,
   isProfileOpen, setIsProfileOpen, isMobileMenuOpen,

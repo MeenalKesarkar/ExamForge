@@ -15,6 +15,7 @@ interface StudentDashboardSummaryProps {
   onExplore: () => void;
 }
 
+// StudentDashboardSummary component
 export default function StudentDashboardSummary({
   user, exams, totalQuestions, timedExams, totalAllowedAttempts,
   loading, error, onExplore,

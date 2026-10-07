@@ -17,6 +17,7 @@ export interface IAttempt
   extends Document {
   studentId: mongoose.Types.ObjectId;
   examId: mongoose.Types.ObjectId;
+  attemptKey?: string;
 
   /*
    * The exact questions selected when the
@@ -103,6 +104,11 @@ const attemptSchema =
         ref: "Exam",
         required: true,
         index: true,
+      },
+
+      attemptKey: {
+        type: String,
+        required: false,
       },
 
       /* ---------------------------------------------------
@@ -259,6 +265,11 @@ attemptSchema.index({
   studentId: 1,
   examId: 1,
 });
+
+attemptSchema.index(
+  { attemptKey: 1 },
+  { unique: true, sparse: true }
+);
 
 /*
  * Useful for instructor result pages.

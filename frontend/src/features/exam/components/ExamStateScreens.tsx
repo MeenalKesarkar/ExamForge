@@ -14,6 +14,7 @@ interface ExamStateScreensProps {
   onBack: () => void;
 }
 
+// ExamLoadingScreen component
 export function ExamLoadingScreen() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50">
@@ -25,6 +26,7 @@ export function ExamLoadingScreen() {
   );
 }
 
+// ExamSubmittedScreen component
 export function ExamSubmittedScreen({ submittedStatus, proctoringDisqualified, onBack }: ExamStateScreensProps) {
   return (
     <div className="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm">
@@ -62,6 +64,7 @@ export function ExamSubmittedScreen({ submittedStatus, proctoringDisqualified, o
   );
 }
 
+// ExamResultScreen component
 export function ExamResultScreen({ result, exam, submittedStatus, onBack }: ExamStateScreensProps) {
   if (!result) return null;
 
@@ -97,6 +100,7 @@ export function ExamResultScreen({ result, exam, submittedStatus, onBack }: Exam
   );
 }
 
+// ExamLoadErrorScreen component
 export function ExamLoadErrorScreen({ error, onBack }: ExamStateScreensProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-slate-900">
@@ -112,6 +116,7 @@ export function ExamLoadErrorScreen({ error, onBack }: ExamStateScreensProps) {
   );
 }
 
+// ScoreCard component
 function ScoreCard({
   label,
   value,
