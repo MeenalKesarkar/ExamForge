@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { randomInt } from "crypto";
 import mongoose from "mongoose";
 
 import Exam from "../../models/Exam";
@@ -102,41 +103,37 @@ export const normalizeInstructions = (
    GET /api/exams/published
 ========================================================= */
 export const selectExamQuestions = (questions: IQuestion[], questionCount: number): IQuestion[] => {
-        const shuffledQuestions =  
-          [...questions];  
-    
-        for (  
-          let index =  
-            shuffledQuestions.length -  
-            1;  
-          index > 0;  
-          index--  
-        ) {  
-          const randomIndex =  
-            Math.floor(  
-              Math.random() *  
-                (index + 1)  
-            );  
-    
-          const currentQuestion =  
-            shuffledQuestions[  
-              index  
-            ];  
-    
-          shuffledQuestions[  
-            index  
-          ] =  
-            shuffledQuestions[  
-              randomIndex  
-            ];  
-    
-          shuffledQuestions[  
-            randomIndex  
-          ] =  
-            currentQuestion;  
-        }  
-    
-    return shuffledQuestions.slice(0, questionCount);
+  const shuffledQuestions = [...questions];
+
+  for (let index = shuffledQuestions.length - 1; index > 0; index -= 1) {
+    const randomIndex = randomInt(index + 1);
+    [shuffledQuestions[index], shuffledQuestions[randomIndex]] = [
+      shuffledQuestions[randomIndex],
+      shuffledQuestions[index],
+    ];
+  }
+
+  return shuffledQuestions.slice(0, questionCount);
+};
+
+export const selectUniqueExamQuestions = (
+  questions: IQuestion[],
+  questionCount: number,
+  usedQuestionSets: Set<string>,
+): IQuestion[] | null => {
+  // When the exam asks for every question in the bank, there is only one
+  // possible set. Let every student start with that full set instead of
+  // blocking the second student after the first attempt.
+  if (questions.length === questionCount) {
+    return selectExamQuestions(questions, questionCount);
+  }
+
+  for (let retry = 0; retry < 100; retry += 1) {
+    const selection = selectExamQuestions(questions, questionCount);
+    const key = selection.map((question) => question._id.toString()).sort().join(",");
+    if (!usedQuestionSets.has(key)) return selection;
+  }
+  return null;
 };
 
 export const getAttemptEndTime = (exam: any, startTime: Date): Date => {

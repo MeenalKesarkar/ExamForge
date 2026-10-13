@@ -79,6 +79,13 @@ export const typeLine =
   /^\s*(?:question\s*)?type\s*[:\-]\s*(single|multi|multiple(?:\s+choice)?|single(?:\s+choice)?)\s*$/i;
 
 /*
+ * Human-readable quiz exports sometimes place the type label directly after
+ * the question instead of using "Type: single" / "Type: multi".
+ */
+export const typeLabelPattern =
+  /\b(single\s+answer|single\s+choice|multi(?:ple)?[\s-]+(?:select|answer)|select\s+all\s+that\s+apply)\b/i;
+
+/*
  * Difficulty:
  *
  * Difficulty: easy
@@ -106,7 +113,7 @@ export const marksPattern =
  * Stops before Difficulty or Order if they occur later.
  */
 export const explanationPattern =
-  /\bexplanation\s*:\s*(.*?)(?=\s+(?:difficulty|order)\s*:|\s*$)/i;
+  /\b(?:explanation|why)\s*:\s*(.*?)(?=\s+(?:difficulty|order)\s*:|\s*$)/i;
 
 /*
  * Order:
@@ -318,6 +325,7 @@ export function extractMetadataFromText(value: string): {
   text: string;
   marks?: number;
   explanation?: string;
+  type?: "single" | "multi";
   difficulty?: "easy" | "medium" | "hard";
 } {
   let text = value;
@@ -328,6 +336,11 @@ export function extractMetadataFromText(value: string): {
 
   let explanation:
     | string
+    | undefined;
+
+  let type:
+    | "single"
+    | "multi"
     | undefined;
 
   let difficulty:
@@ -385,6 +398,13 @@ export function extractMetadataFromText(value: string): {
       );
   }
 
+  const typeMatch = text.match(typeLabelPattern);
+  if (typeMatch) {
+    type = /^(?:multi|select)/i.test(typeMatch[1])
+      ? "multi"
+      : "single";
+  }
+
   /*
    * REMOVE METADATA FROM QUESTION TEXT
    *
@@ -398,6 +418,14 @@ export function extractMetadataFromText(value: string): {
    */
 
   text = text
+    .replace(
+      typeLabelPattern,
+      ""
+    )
+    .replace(
+      /\b(?:Explanation|Why)\s*:\s*.*?(?=\s+(?:Difficulty|Order)\s*:|\s*$)/gi,
+      ""
+    )
     .replace(
       /\bOptions\s*:\s*/gi,
       ""
@@ -423,6 +451,7 @@ export function extractMetadataFromText(value: string): {
     text: normalizeText(text),
     marks,
     explanation,
+    type,
     difficulty,
   };
 }

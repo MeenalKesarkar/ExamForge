@@ -6,13 +6,13 @@ import { formatTime } from "../formatTime";
 import { useExamAttempt } from "../hooks/useExamAttempt";
 // ExamPage component
 function ExamPage() {
-    const { loading, submitting, error, attempt, exam, questions, answers, currentIndex, setCurrentIndex, remainingSeconds, timerPaused, resumeTimer, result, submittedStatus, focusWarning, proctoringDisqualified, flaggedQuestions, savingQuestionId, currentQuestion, currentAnswers, answeredCount, unansweredCount, flaggedCount, tabSwitchCount, progress, isLowTime, isCriticalTime, handleAnswerChange, toggleFlag, submitExam, returnToDashboard } = useExamAttempt();
+    const { loading, submitting, error, attempt, exam, questions, answers, currentIndex, setCurrentIndex, remainingSeconds, timerPaused, resumeTimer, result, resultMessage, submittedStatus, focusWarning, proctoringDisqualified, flaggedQuestions, savingQuestionId, currentQuestion, currentAnswers, answeredCount, unansweredCount, flaggedCount, tabSwitchCount, progress, isLowTime, isCriticalTime, handleAnswerChange, toggleFlag, submitExam, returnToDashboard } = useExamAttempt();
     if (loading)
         return <ExamLoadingScreen />;
     if (submittedStatus && result)
         return <ExamResultScreen submittedStatus={submittedStatus} result={result} exam={exam} onBack={returnToDashboard}/>;
     if (submittedStatus)
-        return <ExamSubmittedScreen submittedStatus={submittedStatus} proctoringDisqualified={proctoringDisqualified} onBack={returnToDashboard}/>;
+        return <ExamSubmittedScreen submittedStatus={submittedStatus} proctoringDisqualified={proctoringDisqualified} resultMessage={resultMessage} onBack={returnToDashboard}/>;
     if (!attempt || !exam || !currentQuestion)
         return <ExamLoadErrorScreen error={error} onBack={returnToDashboard}/>;
     if (timerPaused)
@@ -20,7 +20,7 @@ function ExamPage() {
       <section className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600"><Clock3 className="h-7 w-7"/></div>
         <h1 className="mt-5 text-2xl font-extrabold">Exam paused</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Your progress is saved. Resume the exam when you are ready; the timer will continue from where it paused.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Your remaining exam time is saved while paused. The exam&apos;s scheduled closing deadline remains in effect, so resume before that deadline.</p>
         {error && <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
         <button type="button" onClick={() => void resumeTimer()} className="mt-6 w-full rounded-xl bg-indigo-600 px-5 py-3.5 font-bold text-white shadow-md transition hover:bg-indigo-700">Resume Exam</button>
       </section>

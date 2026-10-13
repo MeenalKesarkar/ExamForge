@@ -499,6 +499,7 @@ router.get(
         ? await Attempt.find({
             examId: { $in: exams.map((exam) => exam._id) },
             studentId: { $in: students.map((student) => student._id) },
+            archived: { $ne: true },
           }).select("studentId examId status")
         : [];
 

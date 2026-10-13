@@ -59,6 +59,7 @@ router.get(
             "shuffleQuestions",
             "shuffleOptions",
             "published",
+            "version",
             "createdAt",
           ].join(" ")
         )
@@ -79,7 +80,7 @@ router.get(
       };
 
       const examIds = exams.map((exam) => exam._id);
-      const attempts = await Attempt.find({ studentId: student._id, examId: { $in: examIds } })
+      const attempts = await Attempt.find({ studentId: student._id, examId: { $in: examIds }, archived: { $ne: true } })
         .sort({ createdAt: -1 });
       const attemptsByExam = new Map<string, typeof attempts>();
       for (const attempt of attempts) {

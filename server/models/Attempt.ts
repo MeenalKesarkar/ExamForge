@@ -13,11 +13,46 @@ export type AttemptStatus =
   | "EVALUATED"
   | "TIMED_OUT";
 
+export interface AttemptQuestionSnapshot {
+  _id: mongoose.Types.ObjectId;
+  questionText: string;
+  type: "single" | "multi";
+  options: string[];
+  correctAnswers: string[];
+  marks: number;
+  difficulty?: string;
+  order?: number;
+  explanation?: string;
+}
+
+export interface AttemptExamSnapshot {
+  version: number;
+  title: string;
+  subject?: string;
+  degree?: string;
+  yearOfStudy?: number;
+  semester?: number;
+  duration: number;
+  questionCount: number;
+  totalMarks: number;
+  passingMarks: number;
+  negativeMarking: boolean;
+  negativePenalty: number;
+  endDate?: Date;
+  instructions: string[];
+}
+
 export interface IAttempt
   extends Document {
   studentId: mongoose.Types.ObjectId;
   examId: mongoose.Types.ObjectId;
   attemptKey?: string;
+  examVersion: number;
+  examSnapshot: AttemptExamSnapshot;
+  questionSnapshots: AttemptQuestionSnapshot[];
+  archived: boolean;
+  archivedAt?: Date;
+  archiveReason?: string;
 
   /*
    * The exact questions selected when the
@@ -26,6 +61,7 @@ export interface IAttempt
    * These must never be regenerated on refresh.
    */
   questionIds: mongoose.Types.ObjectId[];
+  questionSetKey?: string;
 
   /*
    * Stored progressively as the student answers.
@@ -111,6 +147,26 @@ const attemptSchema =
         required: false,
       },
 
+      examVersion: { type: Number, default: 1, min: 1, index: true },
+      examSnapshot: { type: Schema.Types.Mixed, required: false },
+      questionSnapshots: {
+        type: [new Schema<AttemptQuestionSnapshot>({
+          _id: { type: Schema.Types.ObjectId, required: true },
+          questionText: { type: String, required: true },
+          type: { type: String, enum: ["single", "multi"], required: true },
+          options: { type: [String], required: true },
+          correctAnswers: { type: [String], required: true },
+          marks: { type: Number, required: true },
+          difficulty: { type: String },
+          order: { type: Number },
+          explanation: { type: String },
+        }, { _id: false })],
+        default: [],
+      },
+      archived: { type: Boolean, default: false, index: true },
+      archivedAt: { type: Date, default: undefined },
+      archiveReason: { type: String, default: undefined },
+
       /* ---------------------------------------------------
          FIXED QUESTION SET
       --------------------------------------------------- */
@@ -125,6 +181,7 @@ const attemptSchema =
         required: true,
         default: [],
       },
+      questionSetKey: { type: String, select: false },
 
       /* ---------------------------------------------------
          ANSWERS
@@ -269,6 +326,10 @@ attemptSchema.index({
 attemptSchema.index(
   { attemptKey: 1 },
   { unique: true, sparse: true }
+);
+attemptSchema.index(
+  { examId: 1, examVersion: 1, questionSetKey: 1 },
+  { unique: true, partialFilterExpression: { questionSetKey: { $type: "string" } } },
 );
 
 /*

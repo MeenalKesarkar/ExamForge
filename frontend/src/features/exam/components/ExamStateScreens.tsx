@@ -9,6 +9,7 @@ interface ExamStateScreensProps {
   submittedStatus?: "SUBMITTED" | "TIMED_OUT" | "EVALUATED" | null;
   proctoringDisqualified?: boolean;
   result?: ExamResult | null;
+  resultMessage?: string | null;
   exam?: ExamData | null;
   error?: string;
   onBack: () => void;
@@ -27,7 +28,7 @@ export function ExamLoadingScreen() {
 }
 
 // ExamSubmittedScreen component
-export function ExamSubmittedScreen({ submittedStatus, proctoringDisqualified, onBack }: ExamStateScreensProps) {
+export function ExamSubmittedScreen({ submittedStatus, proctoringDisqualified, resultMessage, onBack }: ExamStateScreensProps) {
   return (
     <div className="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm">
       <div className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
@@ -51,8 +52,8 @@ export function ExamSubmittedScreen({ submittedStatus, proctoringDisqualified, o
               : "Your answers have been submitted successfully."}
           </p>
           <div className="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50 px-5 py-4">
-            <p className="text-sm font-semibold text-indigo-800">Results will be announced soon.</p>
-            <p className="mt-1 text-xs leading-5 text-slate-600">Your score will be displayed after the exam deadline.</p>
+            <p className="text-sm font-semibold text-indigo-800">Results are not available yet.</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">{resultMessage || "Your score will be displayed when the instructor releases results."}</p>
           </div>
           <p className="mt-4 text-xs text-slate-500">This page will automatically check for your result.</p>
           <button type="button" onClick={onBack} className="mt-6 w-full rounded-2xl bg-indigo-600 px-6 py-3.5 font-semibold text-white transition hover:bg-indigo-700">

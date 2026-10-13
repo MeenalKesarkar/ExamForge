@@ -28,6 +28,12 @@ export const ACCESS_TOKEN_EXPIRES_IN =
 export const SESSION_LIFETIME_MS =
   24 * 60 * 60 * 1000;
 
+export const REMEMBER_ME_SESSION_LIFETIME_MS =
+  30 * 24 * 60 * 60 * 1000;
+
+export const MAX_SESSION_LIFETIME_MS =
+  REMEMBER_ME_SESSION_LIFETIME_MS;
+
 export const configuredOtpExpiry = Number(process.env.PASSWORD_RESET_OTP_EXPIRES_MINUTES);
 export const OTP_EXPIRY_MINUTES = Number.isInteger(configuredOtpExpiry) && configuredOtpExpiry >= 1 && configuredOtpExpiry <= 60
   ? configuredOtpExpiry

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   ArrowRight, BookOpen, CircleCheck, Clock3,
   FileQuestion, MinusCircle, Play, Search, Trophy,
@@ -31,6 +32,15 @@ export default function StudentExamFeed({
   filter, onFilterChange, startingExamId, getExamAccent, onStartExam,
   formatDateTime,
 }: StudentExamFeedProps) {
+  const [now, setNow] = useState(0);
+
+  useEffect(() => {
+    const updateNow = () => setNow(Date.now());
+    updateNow();
+    const interval = window.setInterval(updateNow, 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   return (
     <section
               id="available-exams"
@@ -212,8 +222,6 @@ export default function StudentExamFeed({
                          * the backend response does not contain
                          * the status.
                          */
-                        const now =
-                          Date.now();
                         const availabilityStatus =
                           exam.availabilityStatus ??
                           (

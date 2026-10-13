@@ -13,6 +13,8 @@ import {
   REFRESH_TOKEN_SECRET,
   ACCESS_TOKEN_EXPIRES_IN,
   SESSION_LIFETIME_MS,
+  REMEMBER_ME_SESSION_LIFETIME_MS,
+  MAX_SESSION_LIFETIME_MS,
   configuredOtpExpiry,
   OTP_EXPIRY_MINUTES,
   MAX_OTP_ATTEMPTS,
@@ -158,10 +160,15 @@ router.post(
       // Only approved users reach this point.
       // --------------------------------------------------
 
+      const rememberMe = req.body.rememberMe === true;
+      const sessionLifetimeMs = rememberMe
+        ? REMEMBER_ME_SESSION_LIFETIME_MS
+        : SESSION_LIFETIME_MS;
       const sessionExpiresAt = setAuthCookies(
         res,
         user._id.toString(),
-        user.role
+        user.role,
+        Math.floor(Date.now() / 1000) + sessionLifetimeMs / 1000
       );
 
       return res.status(200).json({
@@ -250,9 +257,9 @@ router.post(
 
       const maximumSessionExpiry =
         decoded.iat +
-        SESSION_LIFETIME_MS / 1000;
+        MAX_SESSION_LIFETIME_MS / 1000;
       const sessionExpiresAt = Math.min(
-        decoded.sessionExpiresAt ?? maximumSessionExpiry,
+        decoded.sessionExpiresAt ?? decoded.iat + SESSION_LIFETIME_MS / 1000,
         maximumSessionExpiry,
         decoded.exp
       );

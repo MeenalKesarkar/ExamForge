@@ -10,10 +10,16 @@ export type { AccountStatus, AuthUser, ForgotPasswordResponse, LoginRequest, Log
 // PARSE RESPONSE
 // ======================================================
 
+type ApiPayload = {
+  message?: string;
+  user?: unknown;
+  [key: string]: unknown;
+};
+
 const parseResponse =
-  async (
+  async <T = ApiPayload>(
     response: Response
-  ): Promise<any> => {
+  ): Promise<T> => {
     const contentType =
       response.headers.get(
         "content-type"
@@ -24,7 +30,7 @@ const parseResponse =
         "application/json"
       )
     ) {
-      return response.json();
+      return await response.json() as T;
     }
 
     const text =
@@ -34,7 +40,7 @@ const parseResponse =
       message:
         text ||
         "Unexpected server response",
-    };
+    } as T;
   };
 
 // ======================================================
@@ -93,7 +99,7 @@ export const loginUser =
         );
 
       const result =
-        await parseResponse(
+        await parseResponse<LoginResponse>(
           response
         );
 
@@ -116,7 +122,8 @@ export const loginUser =
         error instanceof TypeError
       ) {
         throw new Error(
-          "Unable to connect to ExamForge. Make sure the backend is running on port 5000."
+          "Unable to connect to ExamForge. Make sure the backend is running on port 5000.",
+          { cause: error }
         );
       }
 
@@ -177,7 +184,7 @@ export const registerUser =
         );
 
       const result =
-        await parseResponse(
+        await parseResponse<RegisterResponse>(
           response
         );
 
@@ -200,7 +207,8 @@ export const registerUser =
         error instanceof TypeError
       ) {
         throw new Error(
-          "Unable to connect to ExamForge. Make sure the backend is running on port 5000."
+          "Unable to connect to ExamForge. Make sure the backend is running on port 5000.",
+          { cause: error }
         );
       }
 
@@ -230,7 +238,7 @@ export const refreshSession =
       );
 
     const result =
-      await parseResponse(
+      await parseResponse<RefreshResponse>(
         response
       );
 
@@ -311,7 +319,7 @@ export const sendForgotPasswordOTP =
       );
 
     const result =
-      await parseResponse(
+      await parseResponse<ForgotPasswordResponse>(
         response
       );
 
@@ -363,7 +371,7 @@ export const verifyForgotPasswordOTP =
       );
 
     const result =
-      await parseResponse(
+      await parseResponse<VerifyOTPResponse>(
         response
       );
 
@@ -423,7 +431,7 @@ export const resetPassword =
       );
 
     const result =
-      await parseResponse(
+      await parseResponse<ResetPasswordResponse>(
         response
       );
 

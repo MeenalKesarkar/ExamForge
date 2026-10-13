@@ -1,8 +1,12 @@
 import { Response, Router, type RequestHandler } from "express";
 import mongoose from "mongoose";
+import { createHash } from "crypto";
+import { basename } from "path";
 import multer from "multer";
 import Exam from "../../models/Exam";
 import Question from "../../models/Question";
+import QuestionSourcePdf from "../../models/QuestionSourcePdf";
+import { advancePublishedExamVersion, freezeActiveExamAttempts } from "../exams/versioning";
 import { AuthenticatedRequest, requireAuth } from "../../middleware/authMiddleware";
 import {
   extractPdfQuestionText,
@@ -53,8 +57,12 @@ function normalizeDuplicateValue(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function getQuestionDuplicateKey(questionText: string, options: string[]): string {
-  const normalizedQuestion = normalizeDuplicateValue(questionText);
+export function getQuestionDuplicateKey(questionText: string, options: string[]): string {
+  const canonicalQuestion = questionText
+    .replace(/^\s*(?:question\s*)?\d+\s*[.):\-]\s*/i, "")
+    .replace(/\b(?:Why|Explanation)\s*:\s*[\s\S]*$/i, "")
+    .replace(/\b(?:SINGLE\s+ANSWER|SINGLE\s+CHOICE|MULTI(?:PLE)?[\s-]+(?:SELECT|ANSWER)|SELECT\s+ALL\s+THAT\s+APPLY)\b/gi, "");
+  const normalizedQuestion = normalizeDuplicateValue(canonicalQuestion);
   const normalizedOptions = options
     .map((option) => normalizeDuplicateValue(option))
     .sort();
@@ -78,6 +86,31 @@ async function getOwnedExam(examId: string, req: AuthenticatedRequest, res: Resp
   }
   return exam;
 }
+
+router.get("/pdf-library", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== "instructor" || !req.user.userId) {
+      return res.status(403).json({ message: "Instructor access required." });
+    }
+
+    const files = await QuestionSourcePdf.find({ ownerId: req.user.userId })
+      .select("originalName sha256 size createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      files: files.map((file) => ({
+        _id: file._id,
+        originalName: file.originalName,
+        size: file.size,
+        uploadedAt: file.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error("GET /api/questions/pdf-library error:", error);
+    return res.status(500).json({ message: "Failed to load saved PDFs." });
+  }
+});
 
 function validateDraft(value: unknown): DraftValidation {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -137,20 +170,74 @@ router.post(
       const exam = await getOwnedExam(examId, req, res);
       if (!exam) return;
 
+      let pdfBuffer: Buffer;
+      let sourceName = "";
+      let newlyUploaded = false;
       const file = req.file;
-      if (!file) return res.status(400).json({ message: "Select a PDF file to upload." });
-      if (file.buffer.subarray(0, 5).toString("ascii") !== "%PDF-") {
+
+      if (file) {
+        pdfBuffer = file.buffer;
+        sourceName = basename(file.originalname).slice(0, 255) || "questions.pdf";
+        newlyUploaded = true;
+      } else {
+        const savedPdfId = typeof req.body?.savedPdfId === "string" ? req.body.savedPdfId : "";
+        if (!mongoose.Types.ObjectId.isValid(savedPdfId)) {
+          return res.status(400).json({ message: "Select a PDF file or a saved PDF." });
+        }
+        const savedPdf = await QuestionSourcePdf.findOne({
+          _id: savedPdfId,
+          ownerId: req.user!.userId,
+        }).select("originalName data");
+        if (!savedPdf) return res.status(404).json({ message: "Saved PDF not found." });
+        pdfBuffer = savedPdf.data;
+        sourceName = savedPdf.originalName;
+      }
+
+      if (pdfBuffer.subarray(0, 5).toString("ascii") !== "%PDF-") {
         return res.status(400).json({ message: "The uploaded file is not a valid PDF." });
       }
 
       let text = "";
       try {
-        text = await extractPdfQuestionText(file.buffer);
+        text = await extractPdfQuestionText(pdfBuffer);
       } catch {
         return res.status(422).json({ message: "Could not read this PDF. It may be damaged, encrypted, or unsupported." });
       }
       if (!text.trim()) {
         return res.status(422).json({ message: "This PDF contains no extractable text. Scanned image PDFs are not supported." });
+      }
+
+      let sourcePdf: { _id: mongoose.Types.ObjectId; originalName: string; size: number; createdAt: Date } | null = null;
+      if (newlyUploaded) {
+        const ownerId = new mongoose.Types.ObjectId(req.user!.userId);
+        const sha256 = createHash("sha256").update(pdfBuffer).digest("hex");
+        let savedPdf;
+        try {
+          savedPdf = await QuestionSourcePdf.findOneAndUpdate(
+            { ownerId, sha256 },
+            { $setOnInsert: {
+              ownerId,
+              originalName: sourceName,
+              sha256,
+              contentType: "application/pdf",
+              size: pdfBuffer.length,
+              data: pdfBuffer,
+            } },
+            { upsert: true, new: true, setDefaultsOnInsert: true },
+          ).select("originalName size createdAt");
+        } catch (error) {
+          if (!(error && typeof error === "object" && "code" in error && error.code === 11000)) throw error;
+          savedPdf = await QuestionSourcePdf.findOne({ ownerId, sha256 })
+            .select("originalName size createdAt");
+        }
+        if (savedPdf) {
+          sourcePdf = {
+            _id: savedPdf._id,
+            originalName: savedPdf.originalName,
+            size: savedPdf.size,
+            createdAt: savedPdf.createdAt,
+          };
+        }
       }
 
       const parsed = parsePdfQuestions(text);
@@ -207,6 +294,7 @@ router.post(
         issues,
         validCount: validQuestions.length,
         failedCount: issues.length,
+        sourcePdf,
       });
     } catch (error) {
       console.error("PDF question preview failed:", error);
@@ -282,7 +370,9 @@ router.post(
         });
       }
 
+      if (exam.published) await freezeActiveExamAttempts(exam);
       const imported = await Question.insertMany(documents, { ordered: true });
+      if (imported.length && exam.published) await advancePublishedExamVersion(exam);
       return res.status(201).json({
         message: "PDF questions imported successfully.",
         importedCount: imported.length,

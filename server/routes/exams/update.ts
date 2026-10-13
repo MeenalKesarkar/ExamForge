@@ -6,6 +6,7 @@ import Attempt from "../../models/Attempt";
 import User from "../../models/User";
 import { advanceAttemptTimer } from "../../attemptTimer";
 import { requireAuth, AuthenticatedRequest } from "../../middleware/authMiddleware";
+import { advancePublishedExamVersion, freezeActiveExamAttempts, getExamVersionSignature } from "./versioning";
 
 import {
   isValidObjectId,
@@ -66,6 +67,10 @@ router.put(
             "You do not have access to this exam",
         });
       }
+
+      const wasPublished = exam.published;
+      const previousVersionSignature = getExamVersionSignature(exam);
+      if (wasPublished) await freezeActiveExamAttempts(exam);
 
       const {
         title,
@@ -504,7 +509,11 @@ router.put(
         });
       }
 
-      await exam.save();
+      if (wasPublished && previousVersionSignature !== getExamVersionSignature(exam)) {
+        await advancePublishedExamVersion(exam);
+      } else {
+        await exam.save();
+      }
 
       return res.status(200).json({
         message:

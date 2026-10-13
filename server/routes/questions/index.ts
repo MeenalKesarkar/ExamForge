@@ -6,6 +6,7 @@ import Question from "../../models/Question";
 
 import Exam from "../../models/Exam";
 import { getInstructorExam, getParam, getQuestionBody, getQuestionDuplicateKey, isValidObjectId, QuestionBody, syncExamQuestionCount, validateQuestionData } from "./helpers";
+import { advancePublishedExamVersion, freezeActiveExamAttempts } from "../exams/versioning";
 
 import {
 
@@ -167,6 +168,7 @@ router.post(
 
       }
 
+      if (exam.published) await freezeActiveExamAttempts(exam);
       const question = await Question.create({
 
         examId: new mongoose.Types.ObjectId(examId),
@@ -189,6 +191,7 @@ router.post(
 
       });
 
+      if (exam.published) await advancePublishedExamVersion(exam);
       await syncExamQuestionCount(examId);
       return res.status(201).json({
 
@@ -332,6 +335,7 @@ router.put(
 
       }
 
+      if (exam.published) await freezeActiveExamAttempts(exam);
       question.questionText = data.questionText;
 
       question.type = data.type;
@@ -349,6 +353,7 @@ router.put(
       question.order = data.order;
 
       await question.save();
+      if (exam.published) await advancePublishedExamVersion(exam);
       await syncExamQuestionCount(question.examId.toString());
 
       return res.status(200).json({
@@ -415,7 +420,9 @@ router.delete(
 
       if (!exam) return;
 
+      if (exam.published) await freezeActiveExamAttempts(exam);
       await Question.findByIdAndDelete(questionId);
+      if (exam.published) await advancePublishedExamVersion(exam);
       await syncExamQuestionCount(question.examId.toString());
 
       return res.status(200).json({

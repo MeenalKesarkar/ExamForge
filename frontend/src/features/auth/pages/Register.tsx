@@ -438,14 +438,13 @@ export default function Register() {
               }
             : {
                 teachingAssignments:
-                  assignments.map(
-                    ({
-                      semesterText,
-                      classSectionsText,
-                      ...assignment
-                    }) =>
-                      assignment
-                  ),
+                  assignments.map((assignment) => ({
+                    subject: assignment.subject,
+                    degree: assignment.degree,
+                    yearOfStudy: assignment.yearOfStudy,
+                    semesters: assignment.semesters,
+                    classSections: assignment.classSections,
+                  })),
               }),
         });
 

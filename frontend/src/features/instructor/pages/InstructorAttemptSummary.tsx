@@ -1,5 +1,6 @@
 import { Award, CheckCircle2, Clock3, FileQuestion, XCircle } from "lucide-react";
-import { formatDate, formatDuration, MetaCard, ResultMetric } from "./InstructorAttemptDetailsShared";
+import { MetaCard, ResultMetric } from "./InstructorAttemptDetailsShared";
+import { formatDate, formatDuration } from "./InstructorAttemptDetailsFormat";
 import type { Attempt, Exam, Result } from "./InstructorAttemptDetailsShared";
 
 // AttemptScoreSummary component

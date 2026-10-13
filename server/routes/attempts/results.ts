@@ -16,6 +16,7 @@ import {
   calculateScore,
   getEffectiveEndTime,
   areResultsAvailable,
+  getResultsUnavailableMessage,
   closeExpiredAttempt,
   requireStudentOwnership,
   requireInstructorExamAccess,
@@ -55,16 +56,11 @@ router.get(
         });
       }
 
-      if (
-        !req.user ||
-        req.user.userId !==
-          attempt.studentId.toString()
-      ) {
-        return res.status(403).json({
-          message:
-            "Access denied",
-        });
+      if (attempt.archived) {
+        return res.status(410).json({ message: "This attempt was archived after the exam changed." });
       }
+
+      if (!requireStudentOwnership(req, res, attempt.studentId.toString())) return;
 
       const exam =
         await Exam.findById(
@@ -103,6 +99,7 @@ router.get(
           exam,
           now
         );
+      const resultMessage = getResultsUnavailableMessage(exam, now);
 
       const result =
         resultsAvailable
@@ -135,10 +132,12 @@ router.get(
             exam.totalMarks,
           passingMarks:
             exam.passingMarks,
+          endDate: exam.endDate,
         },
 
         result,
         resultsAvailable,
+        resultMessage,
       });
     } catch (error) {
       console.error(
@@ -185,6 +184,7 @@ router.get(
       const activeAttempts =
         await Attempt.find({
           examId: exam._id,
+          archived: { $ne: true },
           status:
             "IN_PROGRESS",
         });
@@ -202,6 +202,7 @@ router.get(
       const attempts =
         await Attempt.find({
           examId: exam._id,
+          archived: { $ne: true },
         })
           .populate(
             "studentId",
@@ -348,6 +349,7 @@ router.get(
       const attempts =
         await Attempt.find({
           examId: exam._id,
+          archived: { $ne: true },
         })
           .populate(
             "studentId",
@@ -378,6 +380,7 @@ router.get(
       const updatedAttempts =
         await Attempt.find({
           examId: exam._id,
+          archived: { $ne: true },
         })
           .populate(
             "studentId",

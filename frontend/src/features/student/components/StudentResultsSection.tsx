@@ -23,7 +23,7 @@ export default function StudentResultsSection({
                 Results
               </h2>
               <p className="mt-2 text-sm text-slate-500">
-                Exam results unlock after the exam deadline.
+                Results are released after the deadline when the instructor makes them visible.
               </p>
               {loading ? (
                 <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
@@ -78,9 +78,9 @@ export default function StudentResultsSection({
                       ) : (
                         <div className="mt-5 flex items-center gap-2 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
                           <Clock3 className="h-4 w-4 shrink-0 text-amber-600" />
-                          Available after {item.exam.endDate
-                            ? formatDateTime(item.exam.endDate)
-                            : "the exam deadline"}
+                          {item.resultMessage || (item.exam.endDate
+                            ? `Available after ${formatDateTime(item.exam.endDate)}`
+                            : "Results are not available yet.")}
                         </div>
                       )}
                     </article>

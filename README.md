@@ -16,9 +16,9 @@ ExamForge is a locally runnable online exam platform for instructors and student
 - Single-correct and multi-select questions with a question bank
 - Random question selection saved to each attempt for refresh-safe resume
 - One attempt per student and exam, enforced by a MongoDB unique index
-- Server-calculated time from the stored attempt start time; expired attempts are scored and closed on the next attempt request
+- Server-authoritative exam time with a resumable pause; the configured exam deadline remains an absolute cutoff
 - Answers saved as they are selected and scored on the backend
-- Instructor attempt summaries and per-question answer review
+- Instructor attempt summaries and per-question answer review, with results hidden from students until the instructor makes them visible and the exam deadline has passed
 
 ## Run locally
 
@@ -45,6 +45,14 @@ Requirements: Node.js 20.19+ or 22.12+, npm, and a MongoDB database accessible f
 5. Open the local URL printed by Vite and register instructor and student accounts. New accounts remain pending until an administrator approves them. Once approved, create and publish an exam from the instructor account.
 
 Password reset email requires valid SMTP settings in `server/.env`. Do not commit either `.env` file or real credentials.
+
+## Database utilities
+
+- `npm run diagnose-database` connects to the configured `ExamForge` database and reports which expected collections exist. It is read-only.
+- `npm run seed-more-exams` and `npm run seed-questions` validate their data without connecting to MongoDB. They do not write unless explicitly run with `--apply`.
+- To apply a seed, configure `SEED_DATABASE_NAME` to an isolated database ending in `_DEV` or `_TEST`. The exam seed also requires `SEED_INSTRUCTOR_ID` for an active, approved instructor in that database. For example: `npm run seed-more-exams -- --apply`.
+- Seed scripts preserve existing records and do not clear collections. They refuse database writes when `NODE_ENV=production`.
+- The old hard-coded `set-passwords` utility has been removed. Use normal account registration/recovery to create test credentials.
 
 ## Project structure
 

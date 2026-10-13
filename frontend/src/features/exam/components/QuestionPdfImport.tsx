@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, FileUp, Loader2, X } from "lucide-react";
 import { API_URL } from "../../../config/apiConfig";
 
@@ -24,6 +24,13 @@ interface PreviewResponse {
   issues: ImportIssue[];
 }
 
+interface SavedPdf {
+  _id: string;
+  originalName: string;
+  size: number;
+  uploadedAt: string;
+}
+
 interface QuestionPdfImportProps {
   examId: string;
   onImported: () => void;
@@ -37,9 +44,35 @@ export default function QuestionPdfImport({ examId, onImported }: QuestionPdfImp
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
+  const [savedPdfs, setSavedPdfs] = useState<SavedPdf[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(true);
+  const [libraryError, setLibraryError] = useState("");
+  const [selectedSavedPdf, setSelectedSavedPdf] = useState<string | null>(null);
 
-  async function readPdf(file?: File) {
-    if (!file) return;
+  const loadSavedPdfs = useCallback(async () => {
+    setLibraryLoading(true);
+    setLibraryError("");
+    try {
+      const response = await fetch(API_URL + "/questions/pdf-library", {
+        credentials: "include",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Could not load saved PDFs.");
+      setSavedPdfs(Array.isArray(data.files) ? data.files : []);
+    } catch {
+      setSavedPdfs([]);
+      setLibraryError("Could not load your saved PDFs. Refresh the list to try again.");
+    } finally {
+      setLibraryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSavedPdfs();
+  }, [loadSavedPdfs]);
+
+  async function readPdf(file?: File, savedPdfId?: string) {
+    if (!file && !savedPdfId) return;
 
     setError("");
     setSuccess("");
@@ -47,15 +80,21 @@ export default function QuestionPdfImport({ examId, onImported }: QuestionPdfImp
     setLoading(true);
 
     try {
-      const body = new FormData();
-      body.append("pdf", file);
+      const requestBody: BodyInit = file
+        ? (() => {
+            const form = new FormData();
+            form.append("pdf", file);
+            return form;
+          })()
+        : JSON.stringify({ savedPdfId });
 
       const response = await fetch(
         API_URL + "/questions/exam/" + examId + "/import-pdf",
         {
           method: "POST",
           credentials: "include",
-          body,
+          ...(file ? {} : { headers: { "Content-Type": "application/json" } }),
+          body: requestBody,
         }
       );
 
@@ -71,17 +110,24 @@ export default function QuestionPdfImport({ examId, onImported }: QuestionPdfImp
           : [],
         issues: Array.isArray(data.issues) ? data.issues : [],
       });
+      await loadSavedPdfs();
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Could not read this PDF."
       );
     } finally {
       setLoading(false);
+      setSelectedSavedPdf(null);
 
       if (inputRef.current) {
         inputRef.current.value = "";
       }
     }
+  }
+
+  async function readSavedPdf(id: string) {
+    setSelectedSavedPdf(id);
+    await readPdf(undefined, id);
   }
 
   async function confirmImport() {
@@ -187,6 +233,36 @@ export default function QuestionPdfImport({ examId, onImported }: QuestionPdfImp
           )}
           {loading ? "Reading PDF..." : "Upload PDF"}
         </button>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-slate-800">Saved PDFs</h3>
+          <button type="button" onClick={() => void loadSavedPdfs()} disabled={libraryLoading} className="text-xs font-semibold text-indigo-700 hover:text-indigo-900 disabled:opacity-50">
+            {libraryLoading ? "Loading..." : "Refresh list"}
+          </button>
+        </div>
+        {libraryLoading ? (
+          <p className="mt-2 text-sm text-slate-500">Loading your saved PDFs...</p>
+        ) : libraryError ? (
+          <p role="alert" className="mt-2 text-sm text-rose-700">{libraryError}</p>
+        ) : savedPdfs.length === 0 ? (
+          <p className="mt-2 text-sm text-slate-500">Uploaded PDFs will appear here so you can reuse them later.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {savedPdfs.map((pdf) => (
+              <li key={pdf._id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-800">{pdf.originalName}</p>
+                  <p className="text-xs text-slate-500">{(pdf.size / (1024 * 1024)).toFixed(2)} MB · {new Date(pdf.uploadedAt).toLocaleDateString()}</p>
+                </div>
+                <button type="button" onClick={() => void readSavedPdf(pdf._id)} disabled={loading || saving || selectedSavedPdf === pdf._id} className="shrink-0 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
+                  {selectedSavedPdf === pdf._id ? "Reading..." : "Use this PDF"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {error && (

@@ -1,151 +1,96 @@
-import React, {
-  useEffect,
-  useState,
-} from "react";
-
-import {
-  Navigate,
-  useLocation,
-} from "react-router-dom";
-
-import {
-  refreshSession,
-} from "../services/authService";
-
-import {
-  useAppDispatch,
-  useAppSelector,
-} from "../redux/hooks";
-
-import {
-  login,
-} from "../redux/slices/authSlice";
+import { useEffect, useState, type ReactNode } from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAppDispatch, useAppSelector } from "../redux/hooks";
+import { login, logout, type UserRole } from "../redux/slices/authSlice";
+import { logoutUser, refreshSession } from "../services/authService";
 
 interface ProtectedRouteProps {
-  children: React.ReactNode;
-
-  role?:
-    | "student"
-    | "instructor";
+  children: ReactNode;
+  allowedRole: UserRole;
 }
 
-// ProtectedRoute component
-function ProtectedRoute({
-  children,
-  role,
-}: ProtectedRouteProps) {
-  const dispatch =
-    useAppDispatch();
-
-  const location =
-    useLocation();
-
-  const {
-    user,
-    isAuthenticated,
-  } =
-    useAppSelector(
-      (state) =>
-        state.auth
-    );
-
-  const [
-    checking,
-    setChecking,
-  ] = useState(
-    !isAuthenticated
-  );
+export default function ProtectedRoute({ children, allowedRole }: ProtectedRouteProps) {
+  const { user, isAuthenticated, sessionExpiresAt } = useAppSelector((state) => state.auth);
+  const dispatch = useAppDispatch();
+  const location = useLocation();
+  const [restoring, setRestoring] = useState(!isAuthenticated);
+  const [restoreError, setRestoreError] = useState("");
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      setChecking(false);
+    if (isAuthenticated && user) {
       return;
     }
 
     let active = true;
-
-    const restore =
-      async () => {
-        try {
-          const result =
-            await refreshSession();
-
-          if (active) {
-            dispatch(
-              login({
-                user:
-                  result.user,
-              })
-            );
-          }
-        } catch {
-          // No active session
-        } finally {
-          if (active) {
-            setChecking(false);
-          }
+    void refreshSession()
+      .then((session) => {
+        if (active) {
+          dispatch(login({ user: session.user, sessionExpiresAt: session.sessionExpiresAt }));
         }
-      };
+      })
+      .catch((error: Error & { status?: number }) => {
+        if (!active) return;
+        if (error.status === 401 || error.status === 403) {
+          dispatch(logout());
+        } else {
+          setRestoreError("ExamForge could not verify your saved session. Check your connection and try again; your session has not been cleared.");
+        }
+      })
+      .finally(() => {
+        if (active) setRestoring(false);
+      });
 
-    void restore();
+    return () => { active = false; };
+  }, [dispatch, isAuthenticated, user, restoreAttempt]);
 
-    return () => {
-      active = false;
+  useEffect(() => {
+    if (!isAuthenticated || !sessionExpiresAt) return;
+    const remaining = sessionExpiresAt - Date.now();
+    const expireSession = async () => {
+      dispatch(logout());
+      await logoutUser();
     };
-  }, [
-    dispatch,
-    isAuthenticated,
-  ]);
+    if (remaining <= 0) {
+      void expireSession();
+      return;
+    }
+    const timer = window.setTimeout(() => void expireSession(), remaining);
+    return () => window.clearTimeout(timer);
+  }, [dispatch, isAuthenticated, sessionExpiresAt]);
 
-  if (checking) {
+  if (!isAuthenticated && restoring) {
+    return <div className="flex min-h-screen items-center justify-center bg-slate-50"><p className="text-sm text-slate-500">Restoring your secure session...</p></div>;
+  }
+
+  if (!isAuthenticated && restoreError) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
-
-        <div className="text-center">
-
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-indigo-500" />
-
-          <p className="mt-4 text-sm text-white/50">
-            Restoring your secure session...
-          </p>
-
-        </div>
-
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <section className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl">
+          <h1 className="text-xl font-extrabold text-slate-900">Session check paused</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">{restoreError}</p>
+          <button type="button" onClick={() => { setRestoreError(""); setRestoring(true); setRestoreAttempt((count) => count + 1); }} className="mt-6 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-indigo-700">Try again</button>
+        </section>
       </div>
     );
   }
 
   if (!isAuthenticated || !user) {
-    return (
-      <Navigate
-        to="/"
-        replace
-        state={{
-          from:
-            location.pathname,
-        }}
-      />
-    );
+    return <Navigate to="/" replace state={{ from: location.pathname }} />;
   }
 
-  if (
-    role &&
-    user.role !== role
-  ) {
-    return (
-      <Navigate
-        to={
-          user.role ===
-          "student"
-            ? "/student"
-            : "/instructor"
-        }
-        replace
-      />
-    );
+  if (user.role !== allowedRole) {
+    const homeByRole: Record<UserRole, string> = {
+      student: "/student",
+      instructor: "/instructor",
+      admin: "/admin",
+    };
+    return <Navigate to={homeByRole[user.role]} replace />;
+  }
+
+  if (user.accountStatus !== "approved") {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
 }
-
-export default ProtectedRoute;

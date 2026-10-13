@@ -235,57 +235,44 @@ const questions = [
 ];
 
 const seedQuestions = async (): Promise<void> => {
+  const applyChanges = process.argv.includes("--apply");
+  for (const question of questions) {
+    await new Question(question).validate();
+  }
+  console.log(`Validated ${questions.length} questions without connecting to MongoDB.`);
+
+  if (!applyChanges) {
+    console.log("Dry run only. Use --apply with SEED_DATABASE_NAME ending in _DEV or _TEST to write missing questions.");
+    return;
+  }
+
+  const mongoUri = process.env.MONGO_URI;
+  const databaseName = process.env.SEED_DATABASE_NAME?.trim() || "";
+  if (!mongoUri) throw new Error("MONGO_URI is not defined in .env");
+  if (process.env.NODE_ENV === "production") throw new Error("Seed writes are disabled when NODE_ENV=production.");
+  if (!/(?:_DEV|_TEST)$/i.test(databaseName)) {
+    throw new Error("Set SEED_DATABASE_NAME to an isolated database ending in _DEV or _TEST.");
+  }
+
   try {
-    if (!process.env.MONGO_URI) {
-      throw new Error(
-        "MONGO_URI is not defined in .env"
-      );
+    await mongoose.connect(mongoUri, { dbName: databaseName });
+    const examExists = await mongoose.connection.collection("exams").findOne({ _id: EXAM_ID });
+    if (!examExists) throw new Error(`Exam ${EXAM_ID.toString()} does not exist in ${databaseName}; no questions were written.`);
+
+    let inserted = 0;
+    for (const question of questions) {
+      const existing = await Question.exists({ examId: EXAM_ID, order: question.order });
+      if (existing) continue;
+      await Question.create(question);
+      inserted += 1;
     }
-
-    await mongoose.connect(
-      process.env.MONGO_URI,
-      {
-        dbName: "ExamForge",
-      }
-    );
-
-    console.log(
-      "MongoDB connected"
-    );
-
-    const deleted =
-      await Question.deleteMany({
-        examId: EXAM_ID,
-      });
-
-    console.log(
-      `Removed ${deleted.deletedCount} existing question(s)`
-    );
-
-    const inserted =
-      await Question.insertMany(
-        questions
-      );
-
-    console.log(
-      `Inserted ${inserted.length} question(s)`
-    );
-
+    console.log(`Seed operation finished: ${inserted} missing question(s) added. Existing questions were preserved.`);
+  } finally {
     await mongoose.disconnect();
-
-    console.log(
-      "Seeding complete"
-    );
-  } catch (error) {
-    console.error(
-      "Seeding failed:",
-      error instanceof Error
-        ? error.message
-        : error
-    );
-
-    process.exit(1);
   }
 };
 
-seedQuestions();
+void seedQuestions().catch((error: unknown) => {
+  console.error("Seed validation/application failed:", error instanceof Error ? error.message : "Unknown error");
+  process.exitCode = 1;
+});

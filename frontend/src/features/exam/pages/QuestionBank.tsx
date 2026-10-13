@@ -113,7 +113,7 @@ function QuestionBank() {
             const questionsData = await questionsResponse.json();
             const loadedQuestions: Question[] = Array.isArray(questionsData.questions) ? questionsData.questions : [];
             const loadedExam = examData.exam || examData;
-            setExam({ ...loadedExam, questionCount: loadedQuestions.length });
+            setExam(loadedExam);
             setQuestions(loadedQuestions);
         }
         catch (err) {
@@ -309,7 +309,6 @@ function QuestionBank() {
                 if (savedQuestion) {
                     setQuestions((current) => {
                         const updated = [...current, savedQuestion].map((question, index) => ({ ...question, order: index + 1 }));
-                        setExam((exam) => exam ? { ...exam, questionCount: updated.length } : exam);
                         return updated;
                     });
                 }
@@ -360,7 +359,6 @@ function QuestionBank() {
                 const updated = current
                     .filter((question) => question._id !== questionId)
                     .map((question, index) => ({ ...question, order: index + 1 }));
-                setExam((exam) => exam ? { ...exam, questionCount: updated.length } : exam);
                 return updated;
             });
             setDeleteTarget(null);

@@ -67,5 +67,6 @@ export interface AttemptResponse {
   remainingSeconds?: number;
   timerPaused?: boolean;
   resultsAvailable?: boolean;
+  resultMessage?: string | null;
   result?: ExamResult | null;
 }

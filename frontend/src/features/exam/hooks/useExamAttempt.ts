@@ -7,6 +7,7 @@ const MAX_FOCUS_LOSSES = 3;
 interface SubmitResponse {
   message?: string;
   resultsAvailable?: boolean;
+  resultMessage?: string | null;
   result?: Partial<ExamResult> | null;
   attempt?: { status?: AttemptData["status"]; submittedAt?: string | null };
 }
@@ -42,7 +43,7 @@ function normalizeResult(
 export function useExamAttempt() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(attemptId));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState<AttemptData | null>(null);
@@ -53,6 +54,7 @@ export function useExamAttempt() {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [timerPaused, setTimerPaused] = useState(false);
   const [result, setResult] = useState<ExamResult | null>(null);
+  const [resultMessage, setResultMessage] = useState<string | null>(null);
   const [, setResultsAvailable] = useState(false);
   const [submittedStatus, setSubmittedStatus] = useState<"SUBMITTED" | "TIMED_OUT" | "EVALUATED" | null>(null);
   const [focusWarning, setFocusWarning] = useState("");
@@ -64,14 +66,8 @@ export function useExamAttempt() {
   const focusLossRecordedRef = useRef(false);
 
   const loadAttempt = useCallback(async () => {
-    if (!attemptId) {
-      setError("Invalid exam attempt.");
-      setLoading(false);
-      return;
-    }
+    if (!attemptId) return;
     try {
-      setLoading(true);
-      setError("");
       const response = await fetch(`${API_URL}/attempts/${attemptId}`, { credentials: "include" });
       const data: AttemptResponse | { message?: string } = await response.json().catch(() => ({}));
       if (response.status === 401) {
@@ -79,6 +75,7 @@ export function useExamAttempt() {
         return;
       }
       if (!response.ok) throw new Error(getErrorMessage(data, "Unable to load this exam."));
+      setError("");
 
       const loaded = data as AttemptResponse;
       setAttempt(loaded.attempt);
@@ -87,6 +84,7 @@ export function useExamAttempt() {
       setQuestions(loaded.questions);
       setAnswers(loaded.attempt.answers || {});
       setResultsAvailable(Boolean(loaded.resultsAvailable));
+      setResultMessage(loaded.resultMessage || null);
       serverOffsetRef.current = new Date(loaded.serverNow).getTime() - Date.now();
       const remaining = loaded.remainingSeconds ?? Math.floor((new Date(loaded.attempt.endTime).getTime() - (Date.now() + serverOffsetRef.current)) / 1000);
       setRemainingSeconds(Math.max(0, remaining));
@@ -106,7 +104,11 @@ export function useExamAttempt() {
     }
   }, [attemptId, navigate]);
 
-  useEffect(() => { void loadAttempt(); }, [loadAttempt]);
+  useEffect(() => {
+    if (!attemptId) return;
+    const timeout = window.setTimeout(() => void loadAttempt(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [attemptId, loadAttempt]);
 
   useEffect(() => {
     if (!attemptId || !submittedStatus || result) return;
@@ -116,6 +118,7 @@ export function useExamAttempt() {
         if (!response.ok) return;
         const data = await response.json() as AttemptResponse;
         setResultsAvailable(Boolean(data.resultsAvailable));
+        setResultMessage(data.resultMessage || null);
         if (data.resultsAvailable && data.result) {
           setResult(normalizeResult(data.result, data.exam, data.attempt.answers || {}, data.questions.length));
           setAttempt(data.attempt);
@@ -147,6 +150,7 @@ export function useExamAttempt() {
       if (!response.ok) throw new Error(getErrorMessage(data, "Failed to submit exam."));
 
       setResultsAvailable(Boolean(data.resultsAvailable));
+      setResultMessage(data.resultMessage || null);
       setResult(data.resultsAvailable && data.result && exam
         ? normalizeResult(data.result, exam, answers, questions.length)
         : null);
@@ -349,7 +353,7 @@ export function useExamAttempt() {
 
   return {
     loading, submitting, error, attempt, exam, questions, answers,
-    currentIndex, setCurrentIndex, remainingSeconds, result, submittedStatus,
+    currentIndex, setCurrentIndex, remainingSeconds, result, resultMessage, submittedStatus,
     timerPaused, resumeTimer,
     focusWarning, proctoringDisqualified,
     flaggedQuestions, savingQuestionId, currentQuestion, currentAnswers,

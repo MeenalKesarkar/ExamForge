@@ -21,6 +21,7 @@ export interface StudentResult {
   submittedAt?: string | null;
   exam: { title: string; subject?: string; endDate?: string | null };
   resultsAvailable: boolean;
+  resultMessage?: string | null;
   result: { score: number; totalMarks: number; percentage: number; passed: boolean } | null;
 }
 

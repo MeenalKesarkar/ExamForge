@@ -41,10 +41,6 @@ function InstructorAttemptDetails() {
 
   useEffect(() => {
     if (!attemptId) {
-      setError(
-        "Attempt ID is missing."
-      );
-      setLoading(false);
       return;
     }
 
@@ -127,6 +123,17 @@ function InstructorAttemptDetails() {
       data,
       selectedQuestion,
     ]);
+
+  if (!attemptId) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <h1 className="text-xl font-bold text-slate-900">Attempt ID is missing.</h1>
+          <button type="button" onClick={() => navigate("/instructor/results")} className="mt-5 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white">Back to results</button>
+        </section>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

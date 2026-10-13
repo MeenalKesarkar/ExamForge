@@ -70,6 +70,10 @@ function parseSection(
         metadata.difficulty;
     }
 
+    if (metadata.type !== undefined) {
+      explicitType = metadata.type;
+    }
+
     const cleanedLine =
       metadata.text;
 

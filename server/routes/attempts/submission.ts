@@ -4,6 +4,7 @@ import Attempt, { IAttempt } from "../../models/Attempt";
 import Exam from "../../models/Exam";
 import Question, { IQuestion } from "../../models/Question";
 import { requireAuth, AuthenticatedRequest } from "../../middleware/authMiddleware";
+import { archiveCompletedOutdatedAttempt } from "../exams/versioning";
 
 import {
   MAX_PROCTORING_FOCUS_LOSSES,
@@ -14,8 +15,8 @@ import {
   normalizeAnswers,
   sameAnswerSet,
   calculateScore,
-  getEffectiveEndTime,
   areResultsAvailable,
+  getResultsUnavailableMessage,
   closeExpiredAttempt,
   requireStudentOwnership,
   requireInstructorExamAccess,
@@ -55,16 +56,7 @@ router.patch(
         });
       }
 
-      if (
-        !req.user ||
-        req.user.userId !==
-          attempt.studentId.toString()
-      ) {
-        return res.status(403).json({
-          message:
-            "You do not have access to this attempt",
-        });
-      }
+      if (!requireStudentOwnership(req, res, attempt.studentId.toString())) return;
 
       if (
         attempt.status !==
@@ -102,6 +94,13 @@ router.patch(
             "Exam time has expired",
           status:
             "TIMED_OUT",
+        });
+      }
+
+      if (attempt.timerPaused) {
+        return res.status(409).json({
+          message: "Resume the exam before changing answers.",
+          timerPaused: true,
         });
       }
 
@@ -143,10 +142,10 @@ router.patch(
         });
       }
 
-      const question =
-        await Question.findById(
-          questionId
-        );
+      const savedQuestion = attempt.questionSnapshots?.find(
+        (item: IAttempt["questionSnapshots"][number]) => item._id.toString() === questionId,
+      );
+      const question = savedQuestion || await Question.findById(questionId);
 
       if (!question) {
         return res.status(404).json({
@@ -253,16 +252,7 @@ router.patch(
         });
       }
 
-      if (
-        !req.user ||
-        req.user.userId !==
-          attempt.studentId.toString()
-      ) {
-        return res.status(403).json({
-          message:
-            "Access denied",
-        });
-      }
+      if (!requireStudentOwnership(req, res, attempt.studentId.toString())) return;
 
       if (
         attempt.status !==
@@ -320,6 +310,7 @@ router.patch(
         attempt.totalMarks = result.totalMarks;
         attempt.percentage = result.percentage;
         attempt.passed = result.passed;
+        await archiveCompletedOutdatedAttempt(attempt, exam.version || 1);
       }
 
       await attempt.save();
@@ -377,16 +368,7 @@ router.post(
         });
       }
 
-      if (
-        !req.user ||
-        req.user.userId !==
-          attempt.studentId.toString()
-      ) {
-        return res.status(403).json({
-          message:
-            "You do not have access to this attempt",
-        });
-      }
+      if (!requireStudentOwnership(req, res, attempt.studentId.toString())) return;
 
       const exam =
         await Exam.findById(
@@ -404,38 +386,40 @@ router.post(
         attempt.status !==
         "IN_PROGRESS"
       ) {
+        const now = new Date();
+        const resultsAvailable = areResultsAvailable(exam, now);
         return res.status(409).json({
           message:
             "This attempt has already been completed",
 
           status:
             attempt.status,
-
-          score:
-            attempt.score ?? 0,
-
-          totalMarks:
-            attempt.totalMarks ??
-            exam.totalMarks,
-
-          percentage:
-            attempt.percentage ?? 0,
-
-          passed:
-            attempt.passed ?? false,
+          result: resultsAvailable ? {
+            score: attempt.score ?? 0,
+            totalMarks: attempt.totalMarks ?? exam.totalMarks,
+            percentage: attempt.percentage ?? 0,
+            passed: attempt.passed ?? false,
+          } : null,
+          resultsAvailable,
+          resultMessage: getResultsUnavailableMessage(exam, now),
         });
       }
 
       const now = new Date();
-
-      const effectiveEndTime =
-        getEffectiveEndTime(
-          attempt,
-          exam
-        );
-
-      const isExpired =
-        now >= effectiveEndTime;
+      const expired = await closeExpiredAttempt(attempt, exam);
+      if (expired) {
+        const resultsAvailable = areResultsAvailable(exam, now);
+        const expiredResult = resultsAvailable
+          ? await calculateScore(attempt, exam)
+          : null;
+        return res.status(200).json({
+          message: "Exam time expired and attempt was submitted automatically",
+          attempt: { _id: attempt._id, status: attempt.status, submittedAt: attempt.submittedAt },
+          result: expiredResult,
+          resultsAvailable,
+          resultMessage: getResultsUnavailableMessage(exam, now),
+        });
+      }
 
       const result =
         await calculateScore(
@@ -455,23 +439,14 @@ router.post(
       attempt.passed =
         result.passed;
 
-      attempt.submittedAt =
-        isExpired
-          ? effectiveEndTime
-          : now;
-
-      attempt.status =
-        isExpired
-          ? "TIMED_OUT"
-          : "SUBMITTED";
+      attempt.submittedAt = now;
+      attempt.status = "SUBMITTED";
+      await archiveCompletedOutdatedAttempt(attempt, exam.version || 1);
 
       await attempt.save();
 
       return res.status(200).json({
-        message:
-          isExpired
-            ? "Exam time expired and attempt was submitted automatically"
-            : "Exam submitted successfully",
+        message: "Exam submitted successfully",
 
         attempt: {
           _id: attempt._id,
@@ -481,10 +456,7 @@ router.post(
             attempt.submittedAt,
         },
 
-        result: areResultsAvailable(
-          exam,
-          now
-        )
+        result: areResultsAvailable(exam, now)
           ? {
               score:
                 result.score,
@@ -507,11 +479,8 @@ router.post(
             }
           : null,
 
-        resultsAvailable:
-          areResultsAvailable(
-            exam,
-            now
-          ),
+        resultsAvailable: areResultsAvailable(exam, now),
+        resultMessage: getResultsUnavailableMessage(exam, now),
       });
     } catch (error) {
       console.error(

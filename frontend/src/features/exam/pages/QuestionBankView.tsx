@@ -139,8 +139,8 @@ function QuestionBankView({ exam, questions, loading, saving, deletingId, delete
               <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
                 {exam.title}</h1>
               <p className="mt-2 text-sm text-indigo-100 sm:text-base">
-                Build and manage the questions students will receive in this
-                assessment.</p>
+                Manage the question pool. Each student receives a random set
+                for this assessment.</p>
               <div className="mt-5 flex flex-wrap gap-2">
                 {exam.subject && (<span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium">
                     {exam.subject}
@@ -156,18 +156,19 @@ function QuestionBankView({ exam, questions, loading, saving, deletingId, delete
             <div className="min-w-[220px] rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-indigo-100">
-                  Question Progress</span>
+                  Question bank</span>
                 <span className="font-bold text-white">
-                  {questions.length}/{exam.questionCount}</span></div>
+                  {questions.length} available</span></div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/20">
                 <div className="h-full rounded-full bg-white transition-all" style={{ width: `${progress}%` }}/></div>
               <div className="mt-3 flex items-center justify-between text-xs text-indigo-100">
-                <span>{totalMarks} marks added</span>
-                <span>{Math.round(progress)}%</span></div></div></div></section>
+                <span>{totalMarks} raw marks in bank</span>
+                <span>{Math.round(progress)}% ready</span></div>
+              <p className="mt-2 text-xs text-indigo-100">Each student receives {exam.questionCount} randomly selected questions. Their raw question marks are scaled to the exam total of {exam.totalMarks}.</p></div></div></section>
         {/* Stats */}
         <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard icon={<FileQuestion className="h-5 w-5"/>} label="Questions" value={questions.length} description={`Target: ${exam.questionCount}`}/>
-          <StatCard icon={<BookOpen className="h-5 w-5"/>} label="Total Marks" value={totalMarks} description={`Passing: ${exam.passingMarks}`}/>
+          <StatCard icon={<FileQuestion className="h-5 w-5"/>} label="Question Bank" value={questions.length} description={`${exam.questionCount} random questions per student`}/>
+          <StatCard icon={<BookOpen className="h-5 w-5"/>} label="Raw Marks in Bank" value={totalMarks} description={`Student score is scaled to ${exam.totalMarks} exam marks`}/>
           <StatCard icon={<CheckCircle2 className="h-5 w-5"/>} label="Single Correct" value={questions.filter((question) => question.type === "single")
             .length} description="One correct answer"/>
           <StatCard icon={<CircleHelp className="h-5 w-5"/>} label="Multi Select" value={questions.filter((question) => question.type === "multi")

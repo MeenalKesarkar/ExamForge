@@ -38,6 +38,11 @@ export default function ExamQuestionPanel({
   onNext,
   onSubmit,
 }: ExamQuestionPanelProps) {
+  const displayQuestionText = question.questionText
+    .replace(/\s+\b(?:SINGLE\s+ANSWER|SINGLE\s+CHOICE|MULTI(?:PLE)?[\s-]+(?:SELECT|ANSWER)|SELECT\s+ALL\s+THAT\s+APPLY)\b/gi, "")
+    .replace(/\s+\b(?:Why|Explanation)\s*:\s*[\s\S]*$/i, "")
+    .trim();
+
   return (
     <section>
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
@@ -48,7 +53,7 @@ export default function ExamQuestionPanel({
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">{question.marks} {question.marks === 1 ? "mark" : "marks"}</span>
               {question.type === "multi" && <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">Select all that apply</span>}
             </div>
-            <h2 className="mt-5 text-xl font-bold leading-relaxed sm:text-2xl">{question.questionText}</h2>
+            <h2 className="mt-5 text-xl font-bold leading-relaxed sm:text-2xl">{displayQuestionText}</h2>
           </div>
           <button
             type="button"

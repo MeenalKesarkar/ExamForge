@@ -7,9 +7,10 @@
     "dev": "ts-node-dev --respawn --transpile-only --quiet server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "set-passwords": "ts-node scripts/setPasswords.ts",
     "seed-questions": "ts-node scripts/seedQuestions.ts",
-    "fix-database": "ts-node scripts/fixDatabase.ts"
+    "seed-more-exams": "ts-node scripts/seedMoreExams.ts",
+    "diagnose-database": "ts-node scripts/fixDatabase.ts",
+    "test": "node --test -r ts-node/register test/*.test.ts"
   },
   "keywords": [],
   "author": "",

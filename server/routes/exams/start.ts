@@ -6,6 +6,7 @@ import Attempt from "../../models/Attempt";
 import User from "../../models/User";
 import { requireAuth, AuthenticatedRequest } from "../../middleware/authMiddleware";
 import { closeExpiredAttempt } from "../attempts/helpers";
+import { archiveCompletedOutdatedAttempt, makeAttemptExamSnapshot } from "./versioning";
 
 import {
   isValidObjectId,
@@ -13,7 +14,7 @@ import {
   requireInstructorAccess,
   requireStudentAccess,
   normalizeInstructions,
-  selectExamQuestions,
+  selectUniqueExamQuestions,
 } from "./helpers";
 import { getAttemptEndTime } from "./helpers";
 
@@ -216,6 +217,10 @@ router.post(
           createdAt: -1,
         });
 
+      for (const priorAttempt of existingAttempts) {
+        await archiveCompletedOutdatedAttempt(priorAttempt, exam.version || 1);
+      }
+
       /* -----------------------------------------
          ACTIVE ATTEMPT
          RESUME IT
@@ -227,7 +232,7 @@ router.post(
             attempt
           ) =>
             attempt.status ===
-            "IN_PROGRESS"
+            "IN_PROGRESS" && !attempt.archived
         );
 
       if (activeAttempt) {
@@ -330,12 +335,12 @@ router.post(
           (
             attempt
           ) =>
-            attempt.status ===
+            !attempt.archived && (attempt.status ===
               "SUBMITTED" ||
             attempt.status ===
               "EVALUATED" ||
             attempt.status ===
-              "TIMED_OUT"
+              "TIMED_OUT")
         );
 
       const allowedAttempts = 1;
@@ -389,7 +394,22 @@ router.post(
          They will NOT change on refresh.
       ----------------------------------------- */
 
-      const selectedQuestions = selectExamQuestions(questions, exam.questionCount);
+      const currentExamVersion = exam.version || 1;
+      const attemptsForVersion = await Attempt.find({
+        examId: exam._id,
+        ...(currentExamVersion === 1
+          ? { $or: [{ examVersion: 1 }, { examVersion: { $exists: false } }] }
+          : { examVersion: currentExamVersion }),
+      }).select("questionIds").lean();
+      const usedQuestionSets = new Set(
+        attemptsForVersion.map((prior) => prior.questionIds.map(String).sort().join(",")),
+      );
+      let selectedQuestions = selectUniqueExamQuestions(questions, exam.questionCount, usedQuestionSets);
+      if (!selectedQuestions) {
+        return res.status(409).json({
+          message: "All unique question sets for this exam version have been used. Please add more questions or publish a new version.",
+        });
+      }
 
       if (
         selectedQuestions.length !==
@@ -405,7 +425,7 @@ router.post(
          STORE FIXED QUESTION IDS
       ----------------------------------------- */
 
-      const questionIds =
+      let questionIds =
         selectedQuestions.map(
           (
             question
@@ -427,17 +447,38 @@ router.post(
       ----------------------------------------- */
 
       let attempt;
-      try {
-        attempt = await Attempt.create({
+      const attemptKey = `${student._id.toString()}:${exam._id.toString()}:${currentExamVersion}`;
+      for (let creationRetry = 0; creationRetry < 10 && !attempt; creationRetry += 1) {
+        try {
+          attempt = await Attempt.create({
           studentId:
             student._id,
 
           examId:
             exam._id,
 
-          attemptKey: `${student._id.toString()}:${exam._id.toString()}`,
+          attemptKey,
+
+          examVersion: currentExamVersion,
+          examSnapshot: makeAttemptExamSnapshot(exam),
+          questionSnapshots: selectedQuestions.map((question) => ({
+            _id: question._id,
+            questionText: question.questionText,
+            type: question.type,
+            options: [...question.options],
+            correctAnswers: [...question.correctAnswers],
+            marks: question.marks,
+            difficulty: question.difficulty,
+            order: question.order,
+            explanation: question.explanation,
+          })),
 
           questionIds,
+          // A complete bank has only one possible set, so don't reserve that
+          // single set as globally unique or later students could be blocked.
+          questionSetKey: questions.length === exam.questionCount
+            ? undefined
+            : questionIds.map(String).sort().join(","),
 
           answers: {},
 
@@ -467,13 +508,27 @@ router.post(
           passed: false,
 
           tabSwitchCount: 0,
-        });
-      } catch (error) {
-        if (error && typeof error === "object" && "code" in error && error.code === 11000) {
-          return res.status(409).json({ message: "An attempt for this exam already exists" });
+          });
+        } catch (error) {
+          if (!(error && typeof error === "object" && "code" in error && error.code === 11000)) throw error;
+
+          const sameStudentAttempt = await Attempt.exists({ studentId: student._id, examId: exam._id, examVersion: currentExamVersion });
+          if (sameStudentAttempt) {
+            return res.status(409).json({ message: "An attempt for this exam version already exists" });
+          }
+
+          const latestAttempts = await Attempt.find({ examId: exam._id, examVersion: currentExamVersion })
+            .select("questionIds")
+            .lean();
+          const latestUsedSets = new Set(latestAttempts.map((prior) => prior.questionIds.map(String).sort().join(",")));
+          selectedQuestions = selectUniqueExamQuestions(questions, exam.questionCount, latestUsedSets);
+          if (!selectedQuestions) {
+            return res.status(409).json({ message: "All unique question sets for this exam version have been used. Please add more questions or publish a new version." });
+          }
+          questionIds = selectedQuestions.map((question) => question._id);
         }
-        throw error;
       }
+      if (!attempt) return res.status(409).json({ message: "Unable to reserve a unique question set. Please try again." });
 
       /* -----------------------------------------
          RESPONSE

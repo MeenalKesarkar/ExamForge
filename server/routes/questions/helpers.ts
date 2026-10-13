@@ -280,6 +280,5 @@ export const syncExamQuestionCount = async (examId: string) => {
       updateOne: { filter: { _id: question._id }, update: { $set: { order: index + 1 } } },
     })));
   }
-  await Exam.findByIdAndUpdate(examId, { questionCount: questions.length });
   return questions.length;
 };

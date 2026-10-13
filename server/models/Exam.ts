@@ -19,6 +19,7 @@ export interface IExam extends Document {
     shuffleOptions: boolean;
     published: boolean;
     resultsHidden: boolean;
+    version: number;
     createdBy: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -43,6 +44,7 @@ const examSchema = new Schema<IExam>({
     shuffleOptions: { type: Boolean, default: false },
     published: { type: Boolean, default: false, index: true },
     resultsHidden: { type: Boolean, default: false },
+    version: { type: Number, default: 1, min: 1 },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
 }, { collection: "exams", timestamps: true });
 examSchema.index({ createdBy: 1, createdAt: -1 });

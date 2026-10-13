@@ -121,7 +121,7 @@ export default function InstructorResultsOverview() {
         <section className="mb-7 rounded-3xl bg-gradient-to-br from-indigo-700 via-violet-700 to-purple-700 p-7 text-white shadow-xl shadow-indigo-100">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-100">Instructor results</p>
           <h1 className="mt-2 text-3xl font-extrabold">Results by exam</h1>
-          <p className="mt-2 text-sm text-indigo-100">Each exam keeps its own attempts until you hide that results group.</p>
+          <p className="mt-2 text-sm text-indigo-100">Hide results from students while keeping instructor review available.</p>
         </section>
 
         {error && <div role="alert" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">{error}</div>}
@@ -147,7 +147,7 @@ export default function InstructorResultsOverview() {
                   <div className="flex gap-2">
                     <button type="button" onClick={() => navigate(`/instructor/exams/${group._id}/results`)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Open results</button>
                     <button type="button" disabled={updatingExamId === group._id} onClick={() => void setResultsVisible(group._id, false)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
-                      <EyeOff className="h-4 w-4" /> Hide results
+                      <EyeOff className="h-4 w-4" /> Hide from students
                     </button>
                   </div>
                 </div>
@@ -166,14 +166,17 @@ export default function InstructorResultsOverview() {
             {hiddenGroups.length > 0 && (
               <section className="rounded-3xl border border-slate-200 bg-white p-5">
                 <h2 className="font-bold">Hidden results</h2>
-                <p className="mt-1 text-sm text-slate-500">Hidden results remain stored and can be restored at any time.</p>
+                <p className="mt-1 text-sm text-slate-500">Students cannot retrieve these results. Your instructor records remain available and can be restored at any time.</p>
                 <div className="mt-4 divide-y divide-slate-100">
                   {hiddenGroups.map((group) => (
                     <div key={group._id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                       <div><p className="font-semibold">{group.title}</p><p className="text-xs text-slate-500">{group.attempts.length} attempts saved</p></div>
-                      <button type="button" disabled={updatingExamId === group._id} onClick={() => void setResultsVisible(group._id, true)} className="inline-flex items-center gap-2 rounded-xl bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
-                        <Eye className="h-4 w-4" /> Restore results
-                      </button>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => navigate(`/instructor/exams/${group._id}/results`)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Open results</button>
+                        <button type="button" disabled={updatingExamId === group._id} onClick={() => void setResultsVisible(group._id, true)} className="inline-flex items-center gap-2 rounded-xl bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
+                          <Eye className="h-4 w-4" /> Restore for students
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

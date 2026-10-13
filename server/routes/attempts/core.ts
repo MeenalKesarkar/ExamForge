@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import Attempt, { IAttempt } from "../../models/Attempt";
 import Exam from "../../models/Exam";
 import Question, { IQuestion } from "../../models/Question";
-import { advanceAttemptTimer } from "../../attemptTimer";
+import { advanceAttemptTimer, pauseAttemptTimer, resumeAttemptTimer } from "../../attemptTimer";
 import { requireAuth, AuthenticatedRequest } from "../../middleware/authMiddleware";
 
 import {
@@ -20,6 +20,8 @@ import {
   closeExpiredAttempt,
   requireStudentOwnership,
   requireInstructorExamAccess,
+  getResultsUnavailableMessage,
+  getVersionedAttemptExam,
 } from "./helpers";
 
 const router = Router();
@@ -40,6 +42,7 @@ router.get(
 
       const attempts = await Attempt.find({
         studentId: req.user.userId,
+        archived: { $ne: true },
         status: {
           $in: ["SUBMITTED", "EVALUATED", "TIMED_OUT"],
         },
@@ -51,11 +54,12 @@ router.get(
       const results = await Promise.all(
         attempts.map(async (attempt) => {
           const exam = await Exam.findById(attempt.examId)
-            .select("title subject endDate totalMarks passingMarks");
+            .select("title subject endDate totalMarks passingMarks resultsHidden");
 
           if (!exam) return null;
 
           const resultsAvailable = areResultsAvailable(exam, new Date());
+          const resultMessage = getResultsUnavailableMessage(exam, new Date());
 
           return {
             attemptId: attempt._id,
@@ -68,6 +72,7 @@ router.get(
               endDate: exam.endDate,
             },
             resultsAvailable,
+            resultMessage,
             result: resultsAvailable
               ? {
                   score: attempt.score ?? 0,
@@ -95,16 +100,21 @@ router.get(
 
 router.patch("/:attemptId/pause", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const attempt = await Attempt.findById(getParam(req.params.attemptId));
+    const attemptId = getParam(req.params.attemptId);
+    if (!isValidObjectId(attemptId)) return res.status(400).json({ message: "Invalid attempt ID" });
+    const attempt = await Attempt.findById(attemptId);
     if (!attempt) return res.status(404).json({ message: "Attempt not found" });
-    if (!req.user || req.user.role !== "student" || req.user.userId !== attempt.studentId.toString()) return res.status(403).json({ message: "You do not have access to this attempt" });
+    if (!requireStudentOwnership(req, res, attempt.studentId.toString())) return;
     const exam = await Exam.findById(attempt.examId);
     if (!exam) return res.status(404).json({ message: "Exam not found" });
     if (attempt.status !== "IN_PROGRESS") return res.status(409).json({ message: "This attempt is no longer active" });
-    const timer = advanceAttemptTimer(attempt, exam);
-    if (timer.expired) await closeExpiredAttempt(attempt, exam);
-    else await attempt.save();
-    return res.json({ remainingSeconds: attempt.remainingSeconds ?? 0, timerPaused: false, serverNow: new Date() });
+    const timer = pauseAttemptTimer(attempt, getVersionedAttemptExam(attempt, exam));
+    if (timer.expired) {
+      await closeExpiredAttempt(attempt, exam);
+      return res.status(409).json({ message: "The exam time has ended", status: attempt.status });
+    }
+    await attempt.save();
+    return res.json({ remainingSeconds: attempt.remainingSeconds ?? 0, timerPaused: true, serverNow: new Date() });
   } catch (error) {
     console.error("Pause attempt timer error:", error);
     return res.status(500).json({ message: "Unable to pause exam timer" });
@@ -113,16 +123,18 @@ router.patch("/:attemptId/pause", requireAuth, async (req: AuthenticatedRequest,
 
 router.patch("/:attemptId/resume", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const attempt = await Attempt.findById(getParam(req.params.attemptId));
+    const attemptId = getParam(req.params.attemptId);
+    if (!isValidObjectId(attemptId)) return res.status(400).json({ message: "Invalid attempt ID" });
+    const attempt = await Attempt.findById(attemptId);
     if (!attempt) return res.status(404).json({ message: "Attempt not found" });
-    if (!req.user || req.user.role !== "student" || req.user.userId !== attempt.studentId.toString()) return res.status(403).json({ message: "You do not have access to this attempt" });
+    if (!requireStudentOwnership(req, res, attempt.studentId.toString())) return;
     const exam = await Exam.findById(attempt.examId);
     if (!exam) return res.status(404).json({ message: "Exam not found" });
     if (attempt.status !== "IN_PROGRESS") return res.status(409).json({ message: "This attempt is no longer active" });
-    const timer = advanceAttemptTimer(attempt, exam);
+    const timer = resumeAttemptTimer(attempt, getVersionedAttemptExam(attempt, exam));
     if (timer.expired) { await closeExpiredAttempt(attempt, exam); return res.status(409).json({ message: "The exam time has ended" }); }
     await attempt.save();
-    return res.json({ remainingSeconds: attempt.remainingSeconds, timerPaused: false, serverNow: new Date() });
+    return res.json({ remainingSeconds: timer.remainingSeconds, timerPaused: false, serverNow: new Date() });
   } catch (error) {
     console.error("Resume attempt timer error:", error);
     return res.status(500).json({ message: "Unable to resume exam timer" });
@@ -131,13 +143,15 @@ router.patch("/:attemptId/resume", requireAuth, async (req: AuthenticatedRequest
 
 router.patch("/:attemptId/heartbeat", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const attempt = await Attempt.findById(getParam(req.params.attemptId));
+    const attemptId = getParam(req.params.attemptId);
+    if (!isValidObjectId(attemptId)) return res.status(400).json({ message: "Invalid attempt ID" });
+    const attempt = await Attempt.findById(attemptId);
     if (!attempt) return res.status(404).json({ message: "Attempt not found" });
-    if (!req.user || req.user.role !== "student" || req.user.userId !== attempt.studentId.toString()) return res.status(403).json({ message: "You do not have access to this attempt" });
+    if (!requireStudentOwnership(req, res, attempt.studentId.toString())) return;
     const exam = await Exam.findById(attempt.examId);
     if (!exam) return res.status(404).json({ message: "Exam not found" });
     if (attempt.status !== "IN_PROGRESS") return res.status(409).json({ message: "This attempt is no longer active" });
-    const timer = advanceAttemptTimer(attempt, exam);
+    const timer = advanceAttemptTimer(attempt, getVersionedAttemptExam(attempt, exam));
     if (timer.expired) await closeExpiredAttempt(attempt, exam); else await attempt.save();
     return res.json({ remainingSeconds: attempt.remainingSeconds ?? 0, timerPaused: attempt.status === "IN_PROGRESS" && Boolean(attempt.timerPaused), status: attempt.status, serverNow: new Date() });
   } catch (error) {
@@ -178,16 +192,11 @@ router.get(
         });
       }
 
-      if (
-        !req.user ||
-        req.user.userId !==
-          attempt.studentId.toString()
-      ) {
-        return res.status(403).json({
-          message:
-            "You do not have access to this attempt",
-        });
+      if (attempt.archived) {
+        return res.status(410).json({ message: "This attempt was archived after the exam changed. Start the current exam version instead." });
       }
+
+      if (!requireStudentOwnership(req, res, attempt.studentId.toString())) return;
 
       const exam =
         await Exam.findById(
@@ -208,19 +217,16 @@ router.get(
 
       const now = new Date();
       const timer = attempt.status === "IN_PROGRESS"
-        ? advanceAttemptTimer(attempt, exam, now)
+        ? advanceAttemptTimer(attempt, getVersionedAttemptExam(attempt, exam), now)
         : { remainingSeconds: 0, paused: true, expired: true };
       if (attempt.status === "IN_PROGRESS") await attempt.save();
       if (timer.expired && attempt.status === "IN_PROGRESS") {
         await closeExpiredAttempt(attempt, exam);
       }
 
-      const questions: IQuestion[] =
-        await Question.find({
-          _id: {
-            $in: attempt.questionIds,
-          },
-        });
+      const questions: IQuestion[] = attempt.questionSnapshots?.length
+        ? attempt.questionSnapshots as unknown as IQuestion[]
+        : await Question.find({ _id: { $in: attempt.questionIds } });
 
       const questionMap =
         new Map<
@@ -292,6 +298,7 @@ router.get(
 
       const resultsAvailable =
         areResultsAvailable(exam, now);
+      const resultMessage = getResultsUnavailableMessage(exam, now);
 
       const result =
         resultsAvailable &&
@@ -351,22 +358,15 @@ router.get(
 
         exam: {
           _id: exam._id,
-          title: exam.title,
-          subject: exam.subject,
-          duration:
-            exam.duration,
-          questionCount:
-            exam.questionCount,
-          totalMarks:
-            exam.totalMarks,
-          passingMarks:
-            exam.passingMarks,
-          negativeMarking:
-            exam.negativeMarking,
-          negativePenalty:
-            exam.negativePenalty,
-          instructions:
-            exam.instructions,
+          title: attempt.examSnapshot?.title ?? exam.title,
+          subject: attempt.examSnapshot?.subject ?? exam.subject,
+          duration: attempt.examSnapshot?.duration ?? exam.duration,
+          questionCount: attempt.examSnapshot?.questionCount ?? exam.questionCount,
+          totalMarks: attempt.examSnapshot?.totalMarks ?? exam.totalMarks,
+          passingMarks: attempt.examSnapshot?.passingMarks ?? exam.passingMarks,
+          negativeMarking: attempt.examSnapshot?.negativeMarking ?? exam.negativeMarking,
+          negativePenalty: attempt.examSnapshot?.negativePenalty ?? exam.negativePenalty,
+          instructions: attempt.examSnapshot?.instructions ?? exam.instructions,
         },
 
         questions:
@@ -379,6 +379,7 @@ router.get(
 
         result,
         resultsAvailable,
+        resultMessage,
       });
     } catch (error) {
       console.error(

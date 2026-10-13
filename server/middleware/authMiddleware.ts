@@ -13,6 +13,10 @@ import jwt, {
 } from "jsonwebtoken";
 
 import User from "../models/User";
+import {
+  MAX_SESSION_LIFETIME_MS,
+  SESSION_LIFETIME_MS,
+} from "../routes/auth/helpers";
 
 // ======================================================
 // ACCESS TOKEN COOKIE
@@ -23,9 +27,6 @@ const ACCESS_TOKEN_COOKIE =
 
 const REFRESH_TOKEN_COOKIE =
   "examforge_refresh_token";
-
-const SESSION_LIFETIME_SECONDS =
-  24 * 60 * 60;
 
 const cookieOptions = {
   httpOnly: true,
@@ -161,8 +162,8 @@ export const requireAuth = async (
       const now = Math.floor(Date.now() / 1000);
       const absoluteExpiry = Math.min(
         refreshPayload.sessionExpiresAt ??
-          (refreshPayload.iat ?? now) + SESSION_LIFETIME_SECONDS,
-        (refreshPayload.iat ?? now) + SESSION_LIFETIME_SECONDS,
+          (refreshPayload.iat ?? now) + SESSION_LIFETIME_MS / 1000,
+        (refreshPayload.iat ?? now) + MAX_SESSION_LIFETIME_MS / 1000,
         refreshPayload.exp ?? 0
       );
 

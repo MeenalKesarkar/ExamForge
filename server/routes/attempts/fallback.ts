@@ -102,12 +102,9 @@ router.get(
         exam
       );
 
-      const questions: IQuestion[] =
-        await Question.find({
-          _id: {
-            $in: attempt.questionIds,
-          },
-        });
+      const questions: IQuestion[] = attempt.questionSnapshots?.length
+        ? attempt.questionSnapshots as unknown as IQuestion[]
+        : await Question.find({ _id: { $in: attempt.questionIds } });
 
       const questionMap =
         new Map<
@@ -241,6 +238,10 @@ router.get(
       return res.status(200).json({
         attempt: {
           _id: attempt._id,
+          examVersion: attempt.examVersion || 1,
+          archived: Boolean(attempt.archived),
+          archivedAt: attempt.archivedAt,
+          archiveReason: attempt.archiveReason,
           status:
             attempt.status,
           startTime:
@@ -258,25 +259,17 @@ router.get(
 
         exam: {
           _id: exam._id,
-          title: exam.title,
-          subject: exam.subject,
-          degree: exam.degree,
-          yearOfStudy:
-            exam.yearOfStudy,
-          semester:
-            exam.semester,
-          duration:
-            exam.duration,
-          questionCount:
-            exam.questionCount,
-          totalMarks:
-            exam.totalMarks,
-          passingMarks:
-            exam.passingMarks,
-          negativeMarking:
-            exam.negativeMarking,
-          negativePenalty:
-            exam.negativePenalty,
+          title: attempt.examSnapshot?.title ?? exam.title,
+          subject: attempt.examSnapshot?.subject ?? exam.subject,
+          degree: attempt.examSnapshot?.degree ?? exam.degree,
+          yearOfStudy: attempt.examSnapshot?.yearOfStudy ?? exam.yearOfStudy,
+          semester: attempt.examSnapshot?.semester ?? exam.semester,
+          duration: attempt.examSnapshot?.duration ?? exam.duration,
+          questionCount: attempt.examSnapshot?.questionCount ?? exam.questionCount,
+          totalMarks: attempt.examSnapshot?.totalMarks ?? exam.totalMarks,
+          passingMarks: attempt.examSnapshot?.passingMarks ?? exam.passingMarks,
+          negativeMarking: attempt.examSnapshot?.negativeMarking ?? exam.negativeMarking,
+          negativePenalty: attempt.examSnapshot?.negativePenalty ?? exam.negativePenalty,
         },
 
         result,

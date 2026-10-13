@@ -11,6 +11,7 @@ import Question, {
   IQuestion,
 } from "../../models/Question";
 import { advanceAttemptTimer } from "../../attemptTimer";
+import { archiveCompletedOutdatedAttempt } from "../exams/versioning";
 
 import {
   requireAuth,
@@ -101,14 +102,17 @@ export const calculateScore = async (
   attempt: IAttempt,
   exam: any
 ): Promise<ScoreResult> => {
-  const questions: IQuestion[] =
-    await Question.find({
-      _id: {
-        $in: attempt.questionIds,
-      },
-    });
+  const questions: Array<Pick<IQuestion, "_id" | "correctAnswers" | "marks">> =
+    attempt.questionSnapshots?.length
+      ? attempt.questionSnapshots
+      : await Question.find({ _id: { $in: attempt.questionIds } });
 
-  let score = 0;
+  const scoringExam = attempt.examSnapshot
+    ? { ...exam, ...attempt.examSnapshot }
+    : exam;
+
+  let rawScore = 0;
+  let rawTotalMarks = 0;
   let correctCount = 0;
   let incorrectCount = 0;
   let unansweredCount = 0;
@@ -117,6 +121,8 @@ export const calculateScore = async (
     (attempt.answers || {}) as AnswerMap;
 
   for (const question of questions) {
+    const questionMarks = Math.max(0, Number(question.marks || 0));
+    rawTotalMarks += questionMarks;
     const questionId =
       question._id.toString();
 
@@ -144,27 +150,20 @@ export const calculateScore = async (
     if (isCorrect) {
       correctCount += 1;
 
-      score += Number(
-        question.marks || 0
-      );
+      rawScore += questionMarks;
     } else {
       incorrectCount += 1;
 
-      if (exam.negativeMarking) {
-        score -= Number(
-          exam.negativePenalty || 0
-        );
-      }
     }
   }
 
   const totalMarks =
-    typeof exam.totalMarks === "number"
-      ? exam.totalMarks
+    typeof scoringExam.totalMarks === "number"
+      ? scoringExam.totalMarks
       : questions.reduce(
           (
             total: number,
-            question: IQuestion
+            question: Pick<IQuestion, "marks">
           ) =>
             total +
             Number(
@@ -173,7 +172,17 @@ export const calculateScore = async (
           0
         );
 
-  score = Math.max(0, score);
+  // Question marks define the relative weight of questions in the selected
+  // set. Scale the raw points to the exam's configured score so a bank whose
+  // raw marks add up to (for example) 10 can still correctly produce a /25
+  // exam result. Apply the configured negative penalty in exam-score points.
+  const scaledScore = rawTotalMarks > 0
+    ? (rawScore / rawTotalMarks) * totalMarks
+    : 0;
+  const negativePenalty = scoringExam.negativeMarking
+    ? Number(scoringExam.negativePenalty || 0) * incorrectCount
+    : 0;
+  const score = Number(Math.max(0, scaledScore - negativePenalty).toFixed(2));
 
   const percentage =
     totalMarks > 0
@@ -187,13 +196,13 @@ export const calculateScore = async (
 
   const passed =
     score >=
-    Number(exam.passingMarks || 0);
+    Number(scoringExam.passingMarks || 0);
 
   const answeredCount =
     correctCount + incorrectCount;
 
   const passingMarks =
-    Number(exam.passingMarks || 0);
+    Number(scoringExam.passingMarks || 0);
 
   return {
     score,
@@ -212,17 +221,22 @@ export const calculateScore = async (
    EFFECTIVE END TIME
 ========================================================= */
 
+export const getVersionedAttemptExam = (attempt: IAttempt, exam: any) =>
+  attempt.examSnapshot ? { ...exam, ...attempt.examSnapshot } : exam;
+
 export const getEffectiveEndTime = (
   attempt: IAttempt,
   exam: any
 ): Date => {
-  const attemptEndTime = new Date(
-    new Date(attempt.startTime).getTime() + Number(exam.duration) * 60_000
-  );
+  const attemptExam = getVersionedAttemptExam(attempt, exam);
+  const storedEndTime = new Date(attempt.endTime);
+  const attemptEndTime = Number.isFinite(storedEndTime.getTime())
+    ? storedEndTime
+    : new Date(new Date(attempt.startTime).getTime() + Number(attemptExam.duration) * 60_000);
 
-  if (exam.endDate) {
+  if (attemptExam.endDate) {
     const examEndTime = new Date(
-      exam.endDate
+      attemptExam.endDate
     );
 
     if (
@@ -240,7 +254,7 @@ export const areResultsAvailable = (
   exam: any,
   now = new Date()
 ): boolean => {
-  if (!exam.endDate) {
+  if (exam.resultsHidden || !exam.endDate) {
     return false;
   }
 
@@ -248,6 +262,22 @@ export const areResultsAvailable = (
     now.getTime() >=
     new Date(exam.endDate).getTime()
   );
+};
+
+export const getResultsUnavailableMessage = (
+  exam: any,
+  now = new Date()
+): string | null => {
+  if (exam.resultsHidden) {
+    return "Your instructor has hidden the results for this exam.";
+  }
+  if (!exam.endDate) {
+    return "Results are not available because this exam has no release deadline.";
+  }
+  if (now.getTime() < new Date(exam.endDate).getTime()) {
+    return "Results will be available after the exam deadline.";
+  }
+  return null;
 };
 
 /* =========================================================
@@ -262,7 +292,8 @@ export const closeExpiredAttempt = async (
     return false;
   }
 
-  const timer = advanceAttemptTimer(attempt, exam);
+  const attemptExam = getVersionedAttemptExam(attempt, exam);
+  const timer = advanceAttemptTimer(attempt, attemptExam);
   if (!timer.expired) {
     await attempt.save();
     return false;
@@ -271,7 +302,7 @@ export const closeExpiredAttempt = async (
   const result =
     await calculateScore(
       attempt,
-      exam
+      attemptExam
     );
 
   attempt.status = "TIMED_OUT";
@@ -289,6 +320,8 @@ export const closeExpiredAttempt = async (
 
   attempt.passed =
     result.passed;
+
+  await archiveCompletedOutdatedAttempt(attempt, exam.version || 1);
 
   await attempt.save();
 
@@ -313,21 +346,12 @@ export const requireStudentOwnership = (
     return false;
   }
 
-  if (req.user.role !== "student") {
+  if (!canStudentAccessAttempt(req.user, studentId)) {
     res.status(403).json({
       message:
-        "Student access required",
-    });
-
-    return false;
-  }
-
-  if (
-    req.user.userId !== studentId
-  ) {
-    res.status(403).json({
-      message:
-        "You do not have access to this attempt",
+        req.user.role === "student"
+          ? "You do not have access to this attempt"
+          : "Student access required",
     });
 
     return false;
@@ -335,6 +359,11 @@ export const requireStudentOwnership = (
 
   return true;
 };
+
+export const canStudentAccessAttempt = (
+  user: AuthenticatedRequest["user"],
+  attemptStudentId: string,
+): boolean => user?.role === "student" && user.userId === attemptStudentId;
 
 /* =========================================================
    INSTRUCTOR EXAM ACCESS
