@@ -285,6 +285,14 @@ export const logoutUser =
     }
   };
 
+// Finish the server logout before leaving the protected route, then load a clean
+// login page. This prevents ProtectedRoute from starting session restoration
+// between clearing Redux state and navigating away.
+export const logoutAndReload = async (): Promise<void> => {
+  await logoutUser();
+  window.location.replace("/");
+};
+
 // ======================================================
 // SEND OTP
 // ======================================================

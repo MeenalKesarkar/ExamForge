@@ -67,6 +67,7 @@ interface TokenPayload
     | "admin";
 
   sessionExpiresAt?: number;
+  sessionVersion?: number;
 }
 
 // ======================================================
@@ -205,6 +206,7 @@ export const requireAuth = async (
           userId: refreshPayload.userId,
           role: refreshPayload.role,
           sessionExpiresAt: absoluteExpiry,
+          sessionVersion: refreshPayload.sessionVersion ?? 0,
         },
         accessTokenSecret,
         { expiresIn: Math.min(15 * 60, remainingSeconds) }
@@ -278,7 +280,7 @@ export const requireAuth = async (
       await User.findById(
         decoded.userId
       ).select(
-        "_id role accountStatus isActive"
+        "_id role accountStatus isActive sessionVersion"
       );
 
     if (!user) {
@@ -287,6 +289,11 @@ export const requireAuth = async (
           "User not found",
       });
 
+      return;
+    }
+
+    if ((decoded.sessionVersion ?? 0) !== (user.sessionVersion ?? 0)) {
+      res.status(401).json({ message: "Session has been revoked" });
       return;
     }
 

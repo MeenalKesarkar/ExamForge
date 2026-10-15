@@ -31,8 +31,9 @@ import { useNavigate } from "react-router-dom";
 
 import { useAppDispatch, useAppSelector } from "../../../redux/hooks";
 
-import { login, logout } from "../../../redux/slices/authSlice";
+import { login } from "../../../redux/slices/authSlice";
 import { API_URL } from "../../../config/apiConfig";
+import { logoutAndReload } from "../../../services/authService";
 
 // ======================================================
 // TYPES
@@ -334,8 +335,6 @@ function StudentHeader({
   examCount: number;
 }) {
   const navigate = useNavigate();
-  const dispatch = useAppDispatch();
-
   const user = useAppSelector(
     (state) => state.auth.user
   ) as ProfileUser | null;
@@ -389,12 +388,7 @@ function StudentHeader({
 
   const handleConfirmLogout = () => {
     setLoggingOut(true);
-    dispatch(logout());
-    navigate("/", { replace: true });
-    void fetch(`${API_URL}/auth/logout`, {
-      method: "POST",
-      credentials: "include",
-    }).catch((err) => console.error("Logout request error:", err));
+    void logoutAndReload();
   };
 
   const navItems = [
@@ -928,9 +922,11 @@ function StudentProfile() {
       }
     };
 
-    loadProfile();
-
-    return () => controller.abort();
+    const timer = window.setTimeout(() => void loadProfile(), 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [applyUser, dispatch, navigate]);
 
   // Warn before closing the tab with unsaved changes

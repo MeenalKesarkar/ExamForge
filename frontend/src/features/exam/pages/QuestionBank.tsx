@@ -73,8 +73,13 @@ function QuestionBank() {
             navigate("/instructor");
             return;
         }
-        loadData();
-    }, [examId]);
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => void loadData(controller.signal), 0);
+        return () => {
+            window.clearTimeout(timer);
+            controller.abort();
+        };
+    }, [examId, navigate]);
     useEffect(() => {
         if (!success)
             return;
@@ -83,7 +88,7 @@ function QuestionBank() {
         }, 3000);
         return () => clearTimeout(timer);
     }, [success]);
-    async function loadData() {
+    async function loadData(signal?: AbortSignal) {
         if (!examId)
             return;
         setLoading(true);
@@ -92,11 +97,15 @@ function QuestionBank() {
             const [examResponse, questionsResponse] = await Promise.all([
                 fetch(`${API_URL}/exams/${examId}`, {
                     credentials: "include",
+                    ...(signal ? { signal } : {}),
                 }),
                 fetch(`${API_URL}/questions/exam/${examId}`, {
                     credentials: "include",
+                    ...(signal ? { signal } : {}),
                 }),
             ]);
+            if (signal?.aborted)
+                return;
             if (examResponse.status === 401 || questionsResponse.status === 401) {
                 navigate("/");
                 return;
@@ -117,12 +126,15 @@ function QuestionBank() {
             setQuestions(loadedQuestions);
         }
         catch (err) {
+            if (signal?.aborted)
+                return;
             setError(err instanceof Error
                 ? err.message
                 : "Something went wrong while loading the question bank.");
         }
         finally {
-            setLoading(false);
+            if (!signal?.aborted)
+                setLoading(false);
         }
     }
     function openCreateForm() {

@@ -43,6 +43,7 @@ function InstructorAttemptDetails() {
     if (!attemptId) {
       return;
     }
+    const controller = new AbortController();
 
     const loadDetails = async () => {
       try {
@@ -54,6 +55,7 @@ function InstructorAttemptDetails() {
             `${API_URL}/attempts/instructor/${attemptId}`,
             {
               credentials: "include",
+              signal: controller.signal,
             }
           );
 
@@ -79,6 +81,8 @@ function InstructorAttemptDetails() {
         const resultData: DetailResponse =
           await response.json();
 
+        if (controller.signal.aborted) return;
+
         setData(resultData);
 
         if (
@@ -90,17 +94,22 @@ function InstructorAttemptDetails() {
           );
         }
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(
           err instanceof Error
             ? err.message
             : "Something went wrong while loading the result."
         );
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
-    void loadDetails();
+    const timer = window.setTimeout(() => void loadDetails(), 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [attemptId, navigate]);
 
   const selectedQuestionData =

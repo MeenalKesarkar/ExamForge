@@ -44,10 +44,28 @@ const router = Router();
 router.post(
   "/logout",
   async (
-    _req: Request,
+    req: Request,
     res: Response
   ) => {
     try {
+      // Revoke this token generation so an in-flight refresh cannot restore the session.
+      const refreshToken = req.cookies?.[REFRESH_TOKEN_COOKIE];
+      const accessToken = req.cookies?.[ACCESS_TOKEN_COOKIE];
+      const token = refreshToken || accessToken;
+      if (token) {
+        try {
+          const payload = jwt.verify(
+            token,
+            refreshToken ? REFRESH_TOKEN_SECRET : ACCESS_TOKEN_SECRET
+          ) as TokenPayload;
+          if (payload.userId) {
+            await User.updateOne({ _id: payload.userId }, { $inc: { sessionVersion: 1 } });
+          }
+        } catch {
+          // Expired or invalid tokens cannot represent an active session.
+        }
+      }
+
       clearAuthCookies(res);
 
       return res.status(200).json({

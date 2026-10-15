@@ -30,9 +30,9 @@ import {
 import {
   useNavigate,
 } from "react-router-dom";
-import { useAppDispatch } from "../../../redux/hooks";
-import { logout } from "../../../redux/slices/authSlice";
+import { useAppSelector } from "../../../redux/hooks";
 import { API_URL } from "../../../config/apiConfig";
+import { logoutAndReload } from "../../../services/authService";
 
 // ======================================================
 // CONFIG
@@ -148,9 +148,25 @@ const getSemesterLabel = (
 
 // InstructorDashboard component
 function InstructorDashboard() {
-  const dispatch = useAppDispatch();
   const navigate =
     useNavigate();
+  const authUser = useAppSelector((state) => state.auth.user);
+  const user: InstructorUser | null = authUser?.role === "instructor"
+    ? {
+        id: authUser.id,
+        name: authUser.name,
+        email: authUser.email,
+        role: "instructor",
+        degree: authUser.degree,
+        yearOfStudy: authUser.yearOfStudy,
+        semester: authUser.semester,
+        studentId: authUser.studentId,
+        phone: authUser.phone,
+        city: authUser.city,
+        bio: authUser.bio,
+        profilePicture: authUser.profilePicture,
+      }
+    : null;
 
   const [currentTime, setCurrentTime] =
     useState(() => Date.now());
@@ -168,16 +184,13 @@ function InstructorDashboard() {
   // STATE
   // ====================================================
 
-  const [user, setUser] =
-    useState<InstructorUser | null>(
-      null
-    );
-
   const [exams, setExams] =
     useState<Exam[]>([]);
 
   const [loading, setLoading] =
-    useState(true);
+    useState(false);
+
+  const [hasExploredDashboard, setHasExploredDashboard] = useState(false);
 
   const [error, setError] =
     useState("");
@@ -203,132 +216,51 @@ function InstructorDashboard() {
   ] = useState(false);
 
   // ====================================================
-  // LOAD DASHBOARD
+  // LOAD EXAMS WHEN THE INSTRUCTOR REACHES THE EXAM LIST
   // ====================================================
 
   useEffect(() => {
-    const loadDashboard =
-      async () => {
+    const onScroll = () => {
+      if (window.scrollY > 0) setHasExploredDashboard(true);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!hasExploredDashboard) return;
+    const section = document.getElementById("exam-list");
+    if (!section) return;
+    const controller = new AbortController();
+    let requested = false;
+    const observer = new IntersectionObserver((entries) => {
+      if (requested || !entries.some((entry) => entry.isIntersecting)) return;
+      requested = true;
+      observer.disconnect();
+      void (async () => {
         try {
           setLoading(true);
-
           setError("");
-
-          // ------------------------------------------------
-          // Load instructor profile
-          // ------------------------------------------------
-
-          const profileResponse =
-            await fetch(
-              `${API_URL}/profile/me`,
-              {
-                method: "GET",
-
-                credentials:
-                  "include",
-
-                headers: {
-                  Accept:
-                    "application/json",
-                },
-              }
-            );
-
-          if (
-            profileResponse.status ===
-            401
-          ) {
-            navigate("/");
-
+          const response = await fetch(`${API_URL}/exams/instructor`, {
+            method: "GET",
+            credentials: "include",
+            headers: { Accept: "application/json" },
+            signal: controller.signal,
+          });
+          if (response.status === 401) {
+            navigate("/", { replace: true });
             return;
           }
-
-          const profileData =
-            await profileResponse.json();
-
-          if (
-            !profileResponse.ok
-          ) {
-            throw new Error(
-              profileData?.message ||
-                "Unable to load instructor profile"
-            );
-          }
-
-          const profileUser =
-            profileData?.user ||
-            profileData;
-
-          if (
-            profileUser?.role &&
-            profileUser.role !==
-              "instructor"
-          ) {
-            navigate("/student");
-
-            return;
-          }
-
-          setUser(
-            profileUser as InstructorUser
-          );
-
-          // ------------------------------------------------
-          // Load instructor exams
-          // ------------------------------------------------
-
-          const examResponse =
-            await fetch(
-              `${API_URL}/exams/instructor`,
-              {
-                method: "GET",
-
-                credentials:
-                  "include",
-
-                headers: {
-                  Accept:
-                    "application/json",
-                },
-              }
-            );
-
-          if (
-            examResponse.status ===
-            401
-          ) {
-            navigate("/");
-
-            return;
-          }
-
-          const examData =
-            await examResponse.json();
-
-          if (
-            !examResponse.ok
-          ) {
-            throw new Error(
-              examData?.message ||
-                "Unable to load exams"
-            );
-          }
-
-          const examList =
-            Array.isArray(
-              examData
-            )
-              ? examData
-              : Array.isArray(
-                    examData?.exams
-                  )
-                ? examData.exams
-                : [];
-
-          setExams(
-            examList as Exam[]
-          );
+          const data = await response.json();
+          if (!response.ok) throw new Error(data?.message || "Unable to load exams");
+          const examList = Array.isArray(data)
+            ? data
+            : Array.isArray(data?.exams)
+              ? data.exams
+              : [];
+          if (!controller.signal.aborted) setExams(examList as Exam[]);
         } catch (err) {
+          if (controller.signal.aborted) return;
           console.error(
             "Instructor dashboard error:",
             err
@@ -340,12 +272,13 @@ function InstructorDashboard() {
               : "Unable to load instructor dashboard."
           );
         } finally {
-          setLoading(false);
+          if (!controller.signal.aborted) setLoading(false);
         }
-      };
-
-    void loadDashboard();
-  }, [navigate]);
+      })();
+    }, { threshold: 0.1 });
+    observer.observe(section);
+    return () => { observer.disconnect(); controller.abort(); };
+  }, [hasExploredDashboard, navigate]);
 
   // ====================================================
   // FILTER EXAMS
@@ -480,22 +413,7 @@ function InstructorDashboard() {
   const handleLogout =
     () => {
       setLoggingOut(true);
-      dispatch(logout());
-      navigate("/", { replace: true });
-      void fetch(
-          `${API_URL}/auth/logout`,
-          {
-            method: "POST",
-
-            credentials:
-              "include",
-
-            headers: {
-              Accept:
-                "application/json",
-            },
-          }
-        ).catch((err) => console.error("Logout error:", err));
+      void logoutAndReload();
     };
 
   // ====================================================

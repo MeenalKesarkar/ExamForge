@@ -71,6 +71,7 @@ export interface TokenPayload extends JwtPayload {
   userId: string;
   role: UserRole;
   sessionExpiresAt?: number;
+  sessionVersion?: number;
 }
 
 // =========================================================
@@ -96,7 +97,8 @@ export const baseCookieOptions = {
 export const createAccessToken = (
   userId: string,
   role: UserRole,
-  sessionExpiresAt: number
+  sessionExpiresAt: number,
+  sessionVersion = 0
 ) => {
   if (!ACCESS_TOKEN_SECRET) {
     throw new Error(
@@ -109,6 +111,7 @@ export const createAccessToken = (
       userId,
       role,
       sessionExpiresAt,
+      sessionVersion,
     },
     ACCESS_TOKEN_SECRET,
     {
@@ -121,7 +124,8 @@ export const createAccessToken = (
 export const createRefreshToken = (
   userId: string,
   role: UserRole,
-  sessionExpiresAt: number
+  sessionExpiresAt: number,
+  sessionVersion = 0
 ) => {
   if (!REFRESH_TOKEN_SECRET) {
     throw new Error(
@@ -134,6 +138,7 @@ export const createRefreshToken = (
       userId,
       role,
       sessionExpiresAt,
+      sessionVersion,
     },
     REFRESH_TOKEN_SECRET,
     {
@@ -150,7 +155,8 @@ export const setAuthCookies = (
   res: Response,
   userId: string,
   role: UserRole,
-  requestedSessionExpiresAt?: number
+  requestedSessionExpiresAt?: number,
+  sessionVersion = 0
 ): number => {
   const now = Math.floor(Date.now() / 1000);
   const sessionExpiresAt =
@@ -167,14 +173,16 @@ export const setAuthCookies = (
     createAccessToken(
       userId,
       role,
-      sessionExpiresAt
+      sessionExpiresAt,
+      sessionVersion
     );
 
   const refreshToken =
     createRefreshToken(
       userId,
       role,
-      sessionExpiresAt
+      sessionExpiresAt,
+      sessionVersion
     );
 
   res.cookie(

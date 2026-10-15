@@ -24,20 +24,31 @@ export default function AdminProfile() {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
+    const controller = new AbortController();
     const loadProfile = async () => {
       try {
-        const response = await fetch(API_URL + "/profile/me", { credentials: "include", headers: { Accept: "application/json" } });
+        const response = await fetch(API_URL + "/profile/me", {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
         const data = await response.json();
+        if (controller.signal.aborted) return;
         if (response.status === 401) { navigate("/", { replace: true }); return; }
         if (!response.ok) throw new Error(data.message || "Could not load your profile.");
         const loaded = data.user as AdminProfileData;
         if (loaded.role !== "admin") { navigate("/", { replace: true }); return; }
         setProfile(loaded); setForm(makeForm(loaded));
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : "Could not load your profile.");
-      } finally { setLoading(false); }
+      } finally { if (!controller.signal.aborted) setLoading(false); }
     };
-    void loadProfile();
+    const timer = window.setTimeout(() => void loadProfile(), 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [navigate]);
 
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {

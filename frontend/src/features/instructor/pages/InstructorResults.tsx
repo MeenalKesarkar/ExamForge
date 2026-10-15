@@ -42,6 +42,7 @@ function InstructorResults() {
     if (!examId) {
       return;
     }
+    const controller = new AbortController();
 
     const loadResults = async () => {
       try {
@@ -55,6 +56,7 @@ function InstructorResults() {
           `${API_URL}/exams/${examId}`,
           {
             credentials: "include",
+            signal: controller.signal,
           }
         );
 
@@ -80,6 +82,8 @@ function InstructorResults() {
         const examData =
           await examResponse.json();
 
+        if (controller.signal.aborted) return;
+
         setExam(
           examData.exam || examData
         );
@@ -96,6 +100,7 @@ function InstructorResults() {
             `${API_URL}/attempts/exam/${examId}/results`,
             {
               credentials: "include",
+              signal: controller.signal,
             }
           );
 
@@ -105,6 +110,7 @@ function InstructorResults() {
               `${API_URL}/attempts/exam/${examId}`,
               {
                 credentials: "include",
+                signal: controller.signal,
               }
             );
         }
@@ -144,17 +150,22 @@ function InstructorResults() {
           normalizedAttempts
         );
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(
           err instanceof Error
             ? err.message
             : "Something went wrong while loading results."
         );
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
-    void loadResults();
+    const timer = window.setTimeout(() => void loadResults(), 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [examId, navigate]);
 
   const bestAttempts = useMemo(() => {

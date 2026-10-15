@@ -49,26 +49,34 @@ export default function QuestionPdfImport({ examId, onImported }: QuestionPdfImp
   const [libraryError, setLibraryError] = useState("");
   const [selectedSavedPdf, setSelectedSavedPdf] = useState<string | null>(null);
 
-  const loadSavedPdfs = useCallback(async () => {
+  const loadSavedPdfs = useCallback(async (signal?: AbortSignal) => {
     setLibraryLoading(true);
     setLibraryError("");
     try {
       const response = await fetch(API_URL + "/questions/pdf-library", {
         credentials: "include",
+        ...(signal ? { signal } : {}),
       });
       const data = await response.json().catch(() => ({}));
+      if (signal?.aborted) return;
       if (!response.ok) throw new Error(data.message || "Could not load saved PDFs.");
       setSavedPdfs(Array.isArray(data.files) ? data.files : []);
     } catch {
+      if (signal?.aborted) return;
       setSavedPdfs([]);
       setLibraryError("Could not load your saved PDFs. Refresh the list to try again.");
     } finally {
-      setLibraryLoading(false);
+      if (!signal?.aborted) setLibraryLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadSavedPdfs();
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => void loadSavedPdfs(controller.signal), 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [loadSavedPdfs]);
 
   async function readPdf(file?: File, savedPdfId?: string) {

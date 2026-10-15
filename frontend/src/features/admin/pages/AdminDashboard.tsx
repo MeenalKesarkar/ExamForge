@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Check, Clock3, GraduationCap, LogOut, RefreshCw, ShieldCheck, UserRound, Users, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAppDispatch, useAppSelector } from "../../../redux/hooks";
-import { logout } from "../../../redux/slices/authSlice";
-import { logoutUser } from "../../../services/authService";
+import { useAppSelector } from "../../../redux/hooks";
+import { logoutAndReload } from "../../../services/authService";
 import { API_URL } from "../../../config/apiConfig";
 
 type ApplicantRole = "student" | "instructor";
@@ -25,7 +24,6 @@ const getInitials = (name: string) => name.trim().split(/\s+/).filter(Boolean).s
 // AdminDashboard component
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const dispatch = useAppDispatch();
   const admin = useAppSelector((state) => state.auth.user);
   const [requests, setRequests] = useState<AccountRequest[]>([]);
   const [filter, setFilter] = useState<RequestFilter>("all");
@@ -72,7 +70,7 @@ export default function AdminDashboard() {
       setError(err instanceof Error ? err.message : "Could not update this request.");
     } finally { setBusy(null); }
   };
-  const handleLogout = () => { dispatch(logout()); navigate("/", { replace: true }); void logoutUser(); };
+  const handleLogout = () => { void logoutAndReload(); };
   const studentCount = requests.filter((request) => request.role === "student").length;
   const instructorCount = requests.length - studentCount;
 

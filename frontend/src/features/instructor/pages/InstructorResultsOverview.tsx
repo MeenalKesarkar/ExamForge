@@ -33,12 +33,16 @@ export default function InstructorResultsOverview() {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
 
     const loadGroups = async () => {
       try {
         setLoading(true);
         setError("");
-        const examResponse = await fetch(`${API_URL}/exams/instructor`, { credentials: "include" });
+        const examResponse = await fetch(`${API_URL}/exams/instructor`, {
+          credentials: "include",
+          signal: controller.signal,
+        });
 
         if (examResponse.status === 401) {
           navigate("/", { replace: true });
@@ -51,7 +55,10 @@ export default function InstructorResultsOverview() {
 
         const exams = await examResponse.json() as Omit<ExamResultGroup, "attempts">[];
         const resultGroups = await Promise.all(exams.map(async (exam) => {
-          const response = await fetch(`${API_URL}/attempts/exam/${exam._id}/results`, { credentials: "include" });
+          const response = await fetch(`${API_URL}/attempts/exam/${exam._id}/results`, {
+            credentials: "include",
+            signal: controller.signal,
+          });
           if (response.status === 401) {
             navigate("/", { replace: true });
             throw new Error("Your session has expired.");
@@ -66,14 +73,18 @@ export default function InstructorResultsOverview() {
 
         if (active) setGroups(resultGroups);
       } catch (loadError) {
-        if (active) setError(loadError instanceof Error ? loadError.message : "Unable to load exam results.");
+        if (active && !controller.signal.aborted) setError(loadError instanceof Error ? loadError.message : "Unable to load exam results.");
       } finally {
-        if (active) setLoading(false);
+        if (active && !controller.signal.aborted) setLoading(false);
       }
     };
 
-    void loadGroups();
-    return () => { active = false; };
+    const timer = window.setTimeout(() => void loadGroups(), 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [navigate]);
 
   const setResultsVisible = async (examId: string, visible: boolean) => {

@@ -39,13 +39,13 @@ function InstructorStudents() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let isMounted = true;
+    const controller = new AbortController();
 
     const loadStudents = async () => {
       try {
         const response = await fetch(
           `${API_URL}/profile/instructor/students`,
-          { credentials: "include" }
+          { credentials: "include", signal: controller.signal }
         );
 
         if (response.status === 401) {
@@ -58,21 +58,22 @@ function InstructorStudents() {
           throw new Error(data.message || "Unable to load students.");
         }
 
-        if (isMounted) {
+        if (!controller.signal.aborted) {
           setStudents(Array.isArray(data.students) ? data.students : []);
         }
       } catch (err) {
-        if (isMounted) {
+        if (!controller.signal.aborted) {
           setError(err instanceof Error ? err.message : "Unable to load students.");
         }
       } finally {
-        if (isMounted) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
-    void loadStudents();
+    const timer = window.setTimeout(() => void loadStudents(), 0);
     return () => {
-      isMounted = false;
+      window.clearTimeout(timer);
+      controller.abort();
     };
   }, [navigate]);
 

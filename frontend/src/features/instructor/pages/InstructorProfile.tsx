@@ -149,6 +149,7 @@ function InstructorProfile() {
     useState("");
 
   useEffect(() => {
+    const controller = new AbortController();
     const loadProfile = async () => {
       try {
         setLoading(true);
@@ -163,11 +164,14 @@ function InstructorProfile() {
               Accept:
                 "application/json",
             },
+            signal: controller.signal,
           }
         );
 
         const data =
           await response.json();
+
+        if (controller.signal.aborted) return;
 
         if (response.status === 401) {
           navigate("/");
@@ -195,6 +199,7 @@ function InstructorProfile() {
         setUser(profileUser);
         setForm(makeForm(profileUser));
       } catch (err) {
+        if (controller.signal.aborted) return;
         console.error(
           "Instructor profile error:",
           err
@@ -206,11 +211,15 @@ function InstructorProfile() {
             : "Unable to load your profile."
         );
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
-    void loadProfile();
+    const timer = window.setTimeout(() => void loadProfile(), 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [navigate]);
 
   const updateField = (

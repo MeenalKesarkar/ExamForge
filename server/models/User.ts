@@ -64,6 +64,7 @@ export interface IUser
   profilePicture?: string | null;
 
   isActive: boolean;
+  sessionVersion: number;
   isGraduated: boolean;
   graduatedAt?: Date;
   graduatedBy?: mongoose.Types.ObjectId;
@@ -319,6 +320,13 @@ const userSchema =
       isActive: {
         type: Boolean,
         default: true,
+        required: true,
+      },
+
+      // Incremented on logout to invalidate outstanding access and refresh tokens.
+      sessionVersion: {
+        type: Number,
+        default: 0,
         required: true,
       },
 

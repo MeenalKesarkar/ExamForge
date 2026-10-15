@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  useAppDispatch,
-  useAppSelector,
-} from "../../../redux/hooks";
-import { logout } from "../../../redux/slices/authSlice";
-import { logoutUser } from "../../../services/authService";
+import { useAppSelector } from "../../../redux/hooks";
+import { logoutAndReload } from "../../../services/authService";
 import type { Exam, FilterType, StudentResult } from "../types";
 import StudentDashboardHeader from "../components/StudentDashboardHeader";
 import StudentDashboardSummary from "../components/StudentDashboardSummary";
@@ -25,9 +21,6 @@ function StudentDashboard() {
     (state) => state.auth.user
   );
 
-  const dispatch =
-    useAppDispatch();
-
   const navigate =
     useNavigate();
 
@@ -38,10 +31,12 @@ function StudentDashboard() {
     useState<StudentResult[]>([]);
 
   const [resultsLoading, setResultsLoading] =
-    useState(true);
+    useState(false);
 
   const [loading, setLoading] =
-    useState(true);
+    useState(false);
+
+  const [hasExploredDashboard, setHasExploredDashboard] = useState(false);
 
   const [error, setError] =
     useState("");
@@ -94,8 +89,23 @@ function StudentDashboard() {
   // ======================================================
 
   useEffect(() => {
-    const fetchPublishedExams =
-      async () => {
+    const onScroll = () => {
+      if (window.scrollY > 0) setHasExploredDashboard(true);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!hasExploredDashboard) return;
+    const section = document.getElementById("available-exams");
+    if (!section) return;
+    const controller = new AbortController();
+    let requested = false;
+    const observer = new IntersectionObserver((entries) => {
+      if (requested || !entries.some((entry) => entry.isIntersecting)) return;
+      requested = true;
+      void (async () => {
         try {
           setLoading(true);
           setError("");
@@ -106,6 +116,7 @@ function StudentDashboard() {
               {
                 credentials:
                   "include",
+                signal: controller.signal,
               }
             );
 
@@ -119,8 +130,9 @@ function StudentDashboard() {
             );
           }
 
-          setExams(data);
+          if (!controller.signal.aborted) setExams(data);
         } catch (err) {
+          if (controller.signal.aborted) return;
           const message =
             err instanceof Error
               ? err.message
@@ -128,46 +140,45 @@ function StudentDashboard() {
 
           setError(message);
         } finally {
-          setLoading(false);
+          if (!controller.signal.aborted) setLoading(false);
         }
-      };
-
-    fetchPublishedExams();
-  }, []);
+      })();
+      observer.disconnect();
+    }, { threshold: 0.1 });
+    observer.observe(section);
+    return () => { observer.disconnect(); controller.abort(); };
+  }, [hasExploredDashboard]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const fetchResults = async () => {
-      try {
-        const response = await fetch(
-          `${API_URL}/attempts/student/results`,
-          { credentials: "include" }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch results");
+    if (!hasExploredDashboard) return;
+    const section = document.getElementById("student-results");
+    if (!section) return;
+    const controller = new AbortController();
+    let requested = false;
+    const observer = new IntersectionObserver((entries) => {
+      if (requested || !entries.some((entry) => entry.isIntersecting)) return;
+      requested = true;
+      void (async () => {
+        try {
+          setResultsLoading(true);
+          const response = await fetch(`${API_URL}/attempts/student/results`, {
+            credentials: "include",
+            signal: controller.signal,
+          });
+          if (!response.ok) throw new Error("Failed to fetch results");
+          const data = await response.json();
+          if (!controller.signal.aborted && Array.isArray(data)) setResults(data);
+        } catch (err) {
+          if (!controller.signal.aborted) console.error("Fetch student results error:", err);
+        } finally {
+          if (!controller.signal.aborted) setResultsLoading(false);
         }
-
-        const data = await response.json();
-        if (isMounted && Array.isArray(data)) {
-          setResults(data);
-        }
-      } catch (err) {
-        console.error("Fetch student results error:", err);
-      } finally {
-        if (isMounted) setResultsLoading(false);
-      }
-    };
-
-    void fetchResults();
-    const refresh = window.setInterval(() => void fetchResults(), 60_000);
-
-    return () => {
-      isMounted = false;
-      window.clearInterval(refresh);
-    };
-  }, []);
+      })();
+      observer.disconnect();
+    }, { threshold: 0.1 });
+    observer.observe(section);
+    return () => { observer.disconnect(); controller.abort(); };
+  }, [hasExploredDashboard]);
 
   // ======================================================
   // Filter exams
@@ -260,10 +271,8 @@ function StudentDashboard() {
 
   const handleConfirmLogout =
     () => {
-      dispatch(logout());
-      navigate("/", { replace: true });
-      void logoutUser();
       setShowLogoutModal(false);
+      void logoutAndReload();
     };
 
   // ======================================================

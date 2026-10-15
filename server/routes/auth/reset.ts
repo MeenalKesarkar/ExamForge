@@ -168,7 +168,8 @@ router.post(
         res,
         user._id.toString(),
         user.role,
-        Math.floor(Date.now() / 1000) + sessionLifetimeMs / 1000
+        Math.floor(Date.now() / 1000) + sessionLifetimeMs / 1000,
+        user.sessionVersion ?? 0
       );
 
       return res.status(200).json({
@@ -296,7 +297,7 @@ router.post(
         await User.findById(
           decoded.userId
         ).select(
-          "_id name email role accountStatus degree yearOfStudy semester studentId classSection institution phone city bio profilePicture teachingAssignments isActive"
+          "_id name email role accountStatus degree yearOfStudy semester studentId classSection institution phone city bio profilePicture teachingAssignments isActive sessionVersion"
         );
 
       if (!user) {
@@ -306,6 +307,11 @@ router.post(
           message:
             "User not found",
         });
+      }
+
+      if ((decoded.sessionVersion ?? 0) !== (user.sessionVersion ?? 0)) {
+        clearAuthCookies(res);
+        return res.status(401).json({ message: "Session has been revoked" });
       }
 
       if (!user.isActive) {
@@ -395,7 +401,8 @@ router.post(
         res,
         user._id.toString(),
         user.role,
-        sessionExpiresAt
+        sessionExpiresAt,
+        user.sessionVersion ?? 0
       );
 
       return res.status(200).json({
