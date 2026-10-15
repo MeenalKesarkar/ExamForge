@@ -46,17 +46,30 @@ export default function ProtectedRoute({ children, allowedRole }: ProtectedRoute
 
   useEffect(() => {
     if (!isAuthenticated || !sessionExpiresAt) return;
-    const remaining = sessionExpiresAt - Date.now();
-    const expireSession = async () => {
-      dispatch(logout());
-      await logoutUser();
+    // Browser timers are limited to a signed 32-bit delay (~24.8 days).
+    // A 30-day Remember Me session must be checked and rescheduled in chunks;
+    // passing the full duration to setTimeout can make it fire immediately.
+    const maxTimerDelay = 2_147_000_000;
+    let timer: number | undefined;
+
+    const checkSessionExpiry = () => {
+      const remaining = sessionExpiresAt - Date.now();
+      if (remaining <= 0) {
+        dispatch(logout());
+        void logoutUser();
+        return;
+      }
+
+      timer = window.setTimeout(
+        checkSessionExpiry,
+        Math.min(remaining, maxTimerDelay)
+      );
     };
-    if (remaining <= 0) {
-      void expireSession();
-      return;
-    }
-    const timer = window.setTimeout(() => void expireSession(), remaining);
-    return () => window.clearTimeout(timer);
+
+    checkSessionExpiry();
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [dispatch, isAuthenticated, sessionExpiresAt]);
 
   if (!isAuthenticated && restoring) {

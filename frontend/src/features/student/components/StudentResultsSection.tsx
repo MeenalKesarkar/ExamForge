@@ -4,12 +4,13 @@ import type { StudentResult } from "../types";
 interface StudentResultsSectionProps {
   results: StudentResult[];
   loading: boolean;
+  hasLoaded: boolean;
   formatDateTime: (value?: string | null) => string;
 }
 
 // StudentResultsSection component
 export default function StudentResultsSection({
-  results, loading, formatDateTime,
+  results, loading, hasLoaded, formatDateTime,
 }: StudentResultsSectionProps) {
   return (
     <section id="student-results" className="mt-10">
@@ -29,7 +30,7 @@ export default function StudentResultsSection({
                 <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
                   Loading your results...
                 </div>
-              ) : results.length === 0 ? (
+              ) : !hasLoaded ? null : results.length === 0 ? (
                 <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
                   Completed exam results will appear here.
                 </div>

@@ -180,6 +180,7 @@ router.post(
           sanitizeUser(user),
 
         sessionExpiresAt,
+        rememberMe,
       });
     } catch (error) {
       console.error(
@@ -395,7 +396,7 @@ router.post(
         });
       }
 
-      /* Rotate both cookies while preserving the original one-day expiry. */
+      /* Rotate both cookies while preserving the session's original expiry. */
 
       const sessionExpiry = setAuthCookies(
         res,

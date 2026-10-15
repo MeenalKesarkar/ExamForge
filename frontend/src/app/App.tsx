@@ -1,30 +1,32 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
 
-import Login from "../features/auth/pages/Login";
-import Register from "../features/auth/pages/Register";
-import StudentDashboard from "../features/student/pages/StudentDashboard";
-import StudentProfile from "../features/student/pages/StudentProfile";
-import StudentPreferences from "../features/student/pages/StudentPreferences";
-import InstructorDashboard from "../features/instructor/pages/InstructorDashboard";
-import AdminDashboard from "../features/admin/pages/AdminDashboard";
-import AdminStudents from "../features/admin/pages/AdminStudents";
-import AdminProfile from "../features/admin/pages/AdminProfile";
-import InstructorProfile from "../features/instructor/pages/InstructorProfile";
-import ExamPage from "../features/exam/pages/ExamPage";
-import CreateExam from "../features/exam/pages/CreateExam";
-import EditExam from "../features/exam/pages/EditExam";
-import ForgotPassword from "../features/auth/pages/ForgotPassword";
-import QuestionBank from "../features/exam/pages/QuestionBank";
-import InstructorResults from "../features/instructor/pages/InstructorResults";
-import InstructorResultsOverview from "../features/instructor/pages/InstructorResultsOverview";
-import InstructorAttemptDetails from "../features/instructor/pages/InstructorAttemptDetails";
-import InstructorStudents from "../features/instructor/pages/InstructorStudents";
+const Login = lazy(() => import("../features/auth/pages/Login"));
+const Register = lazy(() => import("../features/auth/pages/Register"));
+const ForgotPassword = lazy(() => import("../features/auth/pages/ForgotPassword"));
+const StudentDashboard = lazy(() => import("../features/student/pages/StudentDashboard"));
+const StudentProfile = lazy(() => import("../features/student/pages/StudentProfile"));
+const StudentPreferences = lazy(() => import("../features/student/pages/StudentPreferences"));
+const InstructorDashboard = lazy(() => import("../features/instructor/pages/InstructorDashboard"));
+const InstructorProfile = lazy(() => import("../features/instructor/pages/InstructorProfile"));
+const InstructorStudents = lazy(() => import("../features/instructor/pages/InstructorStudents"));
+const InstructorResults = lazy(() => import("../features/instructor/pages/InstructorResults"));
+const InstructorResultsOverview = lazy(() => import("../features/instructor/pages/InstructorResultsOverview"));
+const InstructorAttemptDetails = lazy(() => import("../features/instructor/pages/InstructorAttemptDetails"));
+const AdminDashboard = lazy(() => import("../features/admin/pages/AdminDashboard"));
+const AdminStudents = lazy(() => import("../features/admin/pages/AdminStudents"));
+const AdminProfile = lazy(() => import("../features/admin/pages/AdminProfile"));
+const ExamPage = lazy(() => import("../features/exam/pages/ExamPage"));
+const CreateExam = lazy(() => import("../features/exam/pages/CreateExam"));
+const EditExam = lazy(() => import("../features/exam/pages/EditExam"));
+const QuestionBank = lazy(() => import("../features/exam/pages/QuestionBank"));
 
 // App component
 function App() {
   return (
     <BrowserRouter>
+      <Suspense fallback={<div role="status" aria-live="polite">Loading…</div>}>
       <Routes>
         {/* Login */}
         <Route
@@ -206,6 +208,7 @@ function App() {
           }
         />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

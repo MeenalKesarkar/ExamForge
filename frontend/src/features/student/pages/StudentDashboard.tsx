@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppSelector } from "../../../redux/hooks";
 import { logoutAndReload } from "../../../services/authService";
@@ -32,6 +32,9 @@ function StudentDashboard() {
 
   const [resultsLoading, setResultsLoading] =
     useState(false);
+
+  const [examsLoaded, setExamsLoaded] = useState(false);
+  const [resultsLoaded, setResultsLoaded] = useState(false);
 
   const [loading, setLoading] =
     useState(false);
@@ -84,28 +87,46 @@ function StudentDashboard() {
   ] =
     useState(false);
 
+  // A newly authenticated student should begin at the dashboard top, rather
+  // than inherit another session's restored scroll position.
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
+    const handleScrollIntent = (event: KeyboardEvent) => {
+      if (["ArrowDown", "PageDown", " ", "End"].includes(event.key)) {
+        setHasExploredDashboard(true);
+      }
+    };
+    const handleExplore = () => setHasExploredDashboard(true);
+
+    window.addEventListener("wheel", handleExplore, { passive: true });
+    window.addEventListener("touchmove", handleExplore, { passive: true });
+    window.addEventListener("keydown", handleScrollIntent);
+    return () => {
+      window.removeEventListener("wheel", handleExplore);
+      window.removeEventListener("touchmove", handleExplore);
+      window.removeEventListener("keydown", handleScrollIntent);
+    };
+  }, []);
+
   // ======================================================
   // Fetch published exams
   // ======================================================
 
   useEffect(() => {
-    const onScroll = () => {
-      if (window.scrollY > 0) setHasExploredDashboard(true);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  useEffect(() => {
     if (!hasExploredDashboard) return;
-    const section = document.getElementById("available-exams");
-    if (!section) return;
     const controller = new AbortController();
     let requested = false;
+    let requestTimer: number | undefined;
+    const section = document.getElementById("available-exams");
+    if (!section) return;
     const observer = new IntersectionObserver((entries) => {
       if (requested || !entries.some((entry) => entry.isIntersecting)) return;
       requested = true;
-      void (async () => {
+      observer.disconnect();
+      requestTimer = window.setTimeout(() => void (async () => {
         try {
           setLoading(true);
           setError("");
@@ -140,25 +161,33 @@ function StudentDashboard() {
 
           setError(message);
         } finally {
-          if (!controller.signal.aborted) setLoading(false);
+          if (!controller.signal.aborted) {
+            setLoading(false);
+            setExamsLoaded(true);
+          }
         }
-      })();
-      observer.disconnect();
+      })(), 0);
     }, { threshold: 0.1 });
     observer.observe(section);
-    return () => { observer.disconnect(); controller.abort(); };
+    return () => {
+      observer.disconnect();
+      if (requestTimer !== undefined) window.clearTimeout(requestTimer);
+      controller.abort();
+    };
   }, [hasExploredDashboard]);
 
   useEffect(() => {
     if (!hasExploredDashboard) return;
-    const section = document.getElementById("student-results");
-    if (!section) return;
     const controller = new AbortController();
     let requested = false;
+    let requestTimer: number | undefined;
+    const section = document.getElementById("student-results");
+    if (!section) return;
     const observer = new IntersectionObserver((entries) => {
       if (requested || !entries.some((entry) => entry.isIntersecting)) return;
       requested = true;
-      void (async () => {
+      observer.disconnect();
+      requestTimer = window.setTimeout(() => void (async () => {
         try {
           setResultsLoading(true);
           const response = await fetch(`${API_URL}/attempts/student/results`, {
@@ -171,13 +200,19 @@ function StudentDashboard() {
         } catch (err) {
           if (!controller.signal.aborted) console.error("Fetch student results error:", err);
         } finally {
-          if (!controller.signal.aborted) setResultsLoading(false);
+          if (!controller.signal.aborted) {
+            setResultsLoading(false);
+            setResultsLoaded(true);
+          }
         }
-      })();
-      observer.disconnect();
+      })(), 0);
     }, { threshold: 0.1 });
     observer.observe(section);
-    return () => { observer.disconnect(); controller.abort(); };
+    return () => {
+      observer.disconnect();
+      if (requestTimer !== undefined) window.clearTimeout(requestTimer);
+      controller.abort();
+    };
   }, [hasExploredDashboard]);
 
   // ======================================================
@@ -248,6 +283,7 @@ function StudentDashboard() {
   const scrollToSection = (
     id: string
   ) => {
+    setHasExploredDashboard(true);
     document
       .getElementById(id)
       ?.scrollIntoView({
@@ -444,6 +480,7 @@ function StudentDashboard() {
 
         <StudentExamFeed
           loading={loading}
+          hasLoaded={examsLoaded}
           error={error}
           exams={exams}
           filteredExams={filteredExams}
@@ -462,6 +499,7 @@ function StudentDashboard() {
         <StudentResultsSection
           results={results}
           loading={resultsLoading}
+          hasLoaded={resultsLoaded}
           formatDateTime={formatDateTime}
         />
 

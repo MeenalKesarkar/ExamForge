@@ -116,6 +116,19 @@ export const loginUser =
         );
       }
 
+      if (data.rememberMe) {
+        const minimumRememberedSessionMs =
+          30 * 24 * 60 * 60 * 1000 - 60_000;
+        if (
+          !Number.isFinite(result.sessionExpiresAt) ||
+          result.sessionExpiresAt - Date.now() < minimumRememberedSessionMs
+        ) {
+          throw new Error(
+            "The server could not create the requested 30-day session. Please try again."
+          );
+        }
+      }
+
       return result as LoginResponse;
     } catch (error) {
       if (

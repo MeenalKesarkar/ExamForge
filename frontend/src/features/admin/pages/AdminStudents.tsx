@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowLeft, CheckCircle2, GraduationCap, RefreshCw, Search, UserRound, UserRoundCheck, UserRoundX } from "lucide-react";
+import { ArrowLeft, CheckCircle2, GraduationCap, RefreshCw, Search, ShieldAlert, UserRound, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { API_URL } from "../../../config/apiConfig";
 
@@ -31,6 +31,8 @@ export default function AdminStudents() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [pendingAction, setPendingAction] = useState<{ student: StudentRecord; action: "promote" | "graduate" } | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   const loadStudents = useCallback(async () => {
     try {
@@ -52,16 +54,27 @@ export default function AdminStudents() {
     return () => window.clearTimeout(timer);
   }, [loadStudents]);
 
+  useEffect(() => {
+    if (!pendingAction) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    cancelButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPendingAction(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [pendingAction]);
+
   const visibleStudents = useMemo(() => {
     const query = search.trim().toLowerCase();
     return students.filter((student) => !query || `${student.name} ${student.email} ${student.studentId || ""}`.toLowerCase().includes(query));
   }, [search, students]);
 
   const updateStudent = async (student: StudentRecord, action: "promote" | "graduate") => {
-    const prompt = action === "promote"
-      ? `Promote ${student.name} from semester ${student.semester ?? "unknown"} to the next semester?`
-      : `Mark ${student.name} as graduated and deactivate their login? Their exam history will be kept.`;
-    if (!window.confirm(prompt)) return;
     setBusyId(student._id); setError(""); setNotice("");
     try {
       const response = await fetch(`${API_URL}/admin/students/${encodeURIComponent(student._id)}/${action}`, {
@@ -77,6 +90,13 @@ export default function AdminStudents() {
     } finally {
       setBusyId(null);
     }
+  };
+
+  const confirmStudentAction = () => {
+    if (!pendingAction) return;
+    const { student, action } = pendingAction;
+    setPendingAction(null);
+    void updateStudent(student, action);
   };
 
   const activeCount = students.filter((student) => student.isActive && !student.isGraduated).length;
@@ -118,7 +138,7 @@ export default function AdminStudents() {
                 const graduated = student.isGraduated || !student.isActive;
                 return <article key={student._id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 font-extrabold text-indigo-700">{student.name.trim().charAt(0).toUpperCase()}</span><div className="min-w-0"><p className="truncate font-bold">{student.name}</p><p className="truncate text-sm text-slate-500">{student.email}{student.studentId ? ` · ${student.studentId}` : ""}</p><p className="mt-1 text-xs font-semibold text-slate-500">{student.degree || "BCA"} · {academicLabel(student)}{student.classSection ? ` · Section ${student.classSection}` : ""}</p></div></div>
-                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">{graduated ? <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">{student.isGraduated ? "Graduated" : "Inactive"}</span> : <><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">Active</span><button type="button" onClick={() => void updateStudent(student, "promote")} disabled={busyId === student._id} className="rounded-xl border border-indigo-200 px-3 py-2 text-sm font-bold text-indigo-700 transition hover:bg-indigo-50 disabled:opacity-50">{busyId === student._id ? "Saving…" : "Promote semester"}</button><button type="button" onClick={() => void updateStudent(student, "graduate")} disabled={busyId === student._id} className="rounded-xl bg-indigo-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-indigo-800 disabled:opacity-50">Graduate</button></>}</div>
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">{graduated ? <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">{student.isGraduated ? "Graduated" : "Inactive"}</span> : <><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">Active</span><button type="button" onClick={() => setPendingAction({ student, action: "promote" })} disabled={busyId === student._id} className="rounded-xl border border-indigo-200 px-3 py-2 text-sm font-bold text-indigo-700 transition hover:bg-indigo-50 disabled:opacity-50">{busyId === student._id ? "Saving…" : "Promote semester"}</button><button type="button" onClick={() => setPendingAction({ student, action: "graduate" })} disabled={busyId === student._id} className="rounded-xl bg-indigo-700 px-3 py-2 text-sm font-bold text-white transition hover:bg-indigo-800 disabled:opacity-50">Graduate</button></>}</div>
                 </article>;
               })}
             </div>
@@ -126,6 +146,56 @@ export default function AdminStudents() {
         </section>
         <p className="mt-4 flex items-center gap-2 text-xs text-slate-500"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Graduated students remain in the database so historical attempts and results are still available.</p>
       </div>
+
+      {pendingAction && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setPendingAction(null);
+          }}
+        >
+          <section
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="student-action-title"
+            aria-describedby="student-action-description"
+            className="w-full max-w-md overflow-hidden rounded-3xl border border-white/70 bg-white shadow-2xl shadow-slate-950/25"
+          >
+            <div className="flex items-start justify-between gap-4 p-6 pb-4">
+              <span className={`flex h-12 w-12 items-center justify-center rounded-2xl ${pendingAction.action === "graduate" ? "bg-amber-50 text-amber-600" : "bg-indigo-50 text-indigo-600"}`}>
+                {pendingAction.action === "graduate" ? <ShieldAlert className="h-6 w-6" /> : <GraduationCap className="h-6 w-6" />}
+              </span>
+              <button type="button" onClick={() => setPendingAction(null)} aria-label="Close confirmation" className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="px-6 pb-6">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-600">Student progression</p>
+              <h2 id="student-action-title" className="mt-2 text-xl font-extrabold tracking-tight text-slate-950">
+                {pendingAction.action === "promote" ? "Promote to the next semester?" : "Mark student as graduated?"}
+              </h2>
+              <p id="student-action-description" className="mt-2 text-sm leading-6 text-slate-600">
+                {pendingAction.action === "promote"
+                  ? `${pendingAction.student.name} is currently in semester ${pendingAction.student.semester ?? "unknown"}. Their academic record will move forward by one semester.`
+                  : `${pendingAction.student.name}'s login will be deactivated. Their exam history and results will be kept.`}
+              </p>
+              <div className="mt-5 flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white font-extrabold text-indigo-700 shadow-sm">{pendingAction.student.name.trim().charAt(0).toUpperCase()}</span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-slate-900">{pendingAction.student.name}</p>
+                  <p className="truncate text-xs text-slate-500">{pendingAction.student.email} · {academicLabel(pendingAction.student)}</p>
+                </div>
+              </div>
+              <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button ref={cancelButtonRef} type="button" onClick={() => setPendingAction(null)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100">Cancel</button>
+                <button type="button" onClick={confirmStudentAction} className={`rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-sm transition focus:outline-none focus:ring-4 ${pendingAction.action === "graduate" ? "bg-amber-600 hover:bg-amber-700 focus:ring-amber-100" : "bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-100"}`}>
+                  {pendingAction.action === "promote" ? "Promote student" : "Graduate student"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

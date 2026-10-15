@@ -185,13 +185,19 @@ export function useExamAttempt() {
 
   useEffect(() => {
     if (!attemptId || !attempt || attempt.status !== "IN_PROGRESS" || submittedStatus || timerPaused) return;
+    const heartbeatIntervalMs = 30_000;
+    const controller = new AbortController();
+    let active = true;
+    let timeout: number | undefined;
+
     const syncTimer = async () => {
       try {
         const response = await fetch(`${API_URL}/attempts/${attemptId}/heartbeat`, {
-          method: "PATCH", credentials: "include",
+          method: "PATCH", credentials: "include", signal: controller.signal,
         });
-        if (!response.ok) return;
+        if (!response.ok || !active) return;
         const data = await response.json() as { remainingSeconds?: number; timerPaused?: boolean; status?: AttemptData["status"]; serverNow?: string };
+        if (!active) return;
         if (data.status && data.status !== "IN_PROGRESS") {
           await loadAttempt();
           return;
@@ -200,10 +206,16 @@ export function useExamAttempt() {
         if (data.serverNow) serverOffsetRef.current = new Date(data.serverNow).getTime() - Date.now();
         if (data.timerPaused) setTimerPaused(true);
       } catch (syncError) {
-        console.error("Exam timer sync error:", syncError);
+        if (active && !(syncError instanceof DOMException && syncError.name === "AbortError")) {
+          console.error("Exam timer sync error:", syncError);
+        }
+      } finally {
+        // Schedule after completion so a slow request can never overlap another heartbeat.
+        if (active) timeout = window.setTimeout(() => void syncTimer(), heartbeatIntervalMs);
       }
     };
-    const interval = window.setInterval(() => void syncTimer(), 5000);
+
+    timeout = window.setTimeout(() => void syncTimer(), heartbeatIntervalMs);
     const pauseOnExit = () => {
       void fetch(`${API_URL}/attempts/${attemptId}/pause`, {
         method: "PATCH", credentials: "include", keepalive: true,
@@ -211,7 +223,9 @@ export function useExamAttempt() {
     };
     window.addEventListener("pagehide", pauseOnExit);
     return () => {
-      window.clearInterval(interval);
+      active = false;
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      controller.abort();
       window.removeEventListener("pagehide", pauseOnExit);
     };
   }, [attempt, attemptId, loadAttempt, submittedStatus, timerPaused]);

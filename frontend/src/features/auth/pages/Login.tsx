@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type {
   FormEvent,
 } from "react";
@@ -20,6 +20,7 @@ import {
 
 // Login component
 export default function Login() {
+  const submitInProgress = useRef(false);
   const navigate =
     useNavigate();
 
@@ -68,6 +69,7 @@ export default function Login() {
     event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
+    if (submitInProgress.current) return;
 
     setError("");
 
@@ -110,6 +112,7 @@ export default function Login() {
       return;
     }
 
+    submitInProgress.current = true;
     try {
       setLoading(true);
 
@@ -235,6 +238,7 @@ export default function Login() {
         message
       );
     } finally {
+      submitInProgress.current = false;
       setLoading(false);
     }
   };

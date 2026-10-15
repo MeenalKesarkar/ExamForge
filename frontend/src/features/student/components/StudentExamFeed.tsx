@@ -13,6 +13,7 @@ export interface ExamAccent {
 
 interface StudentExamFeedProps {
   loading: boolean;
+  hasLoaded: boolean;
   error: string;
   exams: Exam[];
   filteredExams: Exam[];
@@ -28,7 +29,7 @@ interface StudentExamFeedProps {
 
 // StudentExamFeed component
 export default function StudentExamFeed({
-  loading, error, exams, filteredExams, search, onSearchChange,
+  loading, hasLoaded, error, exams, filteredExams, search, onSearchChange,
   filter, onFilterChange, startingExamId, getExamAccent, onStartExam,
   formatDateTime,
 }: StudentExamFeedProps) {
@@ -151,7 +152,7 @@ export default function StudentExamFeed({
                 </div>
               )}
               {/* No exams */}
-              {!loading &&
+              {hasLoaded && !loading &&
                 !error &&
                 exams.length ===
                   0 && (
