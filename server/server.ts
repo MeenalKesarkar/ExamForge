@@ -1,6 +1,7 @@
 // EXAMFORGE BACKEND - SERVER
 
 import dns from "node:dns";
+import { createServer } from "node:http";
 // MONGODB ATLAS SRV DNS
 
 dns.setServers([
@@ -29,7 +30,8 @@ import examRoutes from "./routes/exams";
 import attemptRoutes from "./routes/attempts";
 import questionRoutes from "./routes/questions";
 import questionPdfRoutes from "./routes/questions/pdf";
-import adminRoutes from "./routes/admin";// APP
+import adminRoutes from "./routes/admin";import { attachSocketServer } from "./socketServer";
+// APP
 
 const app = express();// CONFIGURATION
 
@@ -354,7 +356,11 @@ const startServer =
     // Start Express
     // --------------------------------------------------
 
-    app.listen(
+    const httpServer = createServer(app);
+    const io = attachSocketServer(httpServer, FRONTEND_URL);
+    app.set("io", io);
+
+    httpServer.listen(
       PORT,
       () => {
         console.log("");

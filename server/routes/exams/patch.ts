@@ -49,6 +49,11 @@ router.patch(
       exam.resultsHidden = !req.body.visible;
       await exam.save();
 
+      const io = req.app.get("io") as import("socket.io").Server | undefined;
+      io?.to(`exam:${exam._id.toString()}:results`).emit("attempt:resultsChanged", {
+        examId: exam._id.toString(),
+      });
+
       return res.status(200).json({
         examId: exam._id,
         resultsHidden: exam.resultsHidden,

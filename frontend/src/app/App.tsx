@@ -26,7 +26,22 @@ const QuestionBank = lazy(() => import("../features/exam/pages/QuestionBank"));
 function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<div role="status" aria-live="polite">Loading…</div>}>
+      <Suspense fallback={
+        <div className="min-h-screen bg-slate-50" role="status" aria-live="polite" aria-label="Opening page">
+          <div className="h-1 w-full overflow-hidden bg-indigo-100">
+            <div className="h-full w-1/3 animate-pulse rounded-full bg-indigo-600" />
+          </div>
+          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            <div className="h-9 w-56 animate-pulse rounded-xl bg-slate-200" />
+            <div className="mt-5 h-4 w-80 max-w-full animate-pulse rounded bg-slate-200" />
+            <div className="mt-8 grid gap-4 sm:grid-cols-3">
+              <div className="h-28 animate-pulse rounded-2xl bg-white shadow-sm" />
+              <div className="h-28 animate-pulse rounded-2xl bg-white shadow-sm" />
+              <div className="h-28 animate-pulse rounded-2xl bg-white shadow-sm" />
+            </div>
+          </div>
+        </div>
+      }>
       <Routes>
         {/* Login */}
         <Route

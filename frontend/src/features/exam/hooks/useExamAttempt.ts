@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { AttemptData, AttemptResponse, ExamData, ExamQuestion, ExamResult } from "../types";
 import { API_URL } from "../../../config/apiConfig";
+import { createExamSocket } from "../../../services/examSocket";
 const MAX_FOCUS_LOSSES = 3;
 
 interface SubmitResponse {
@@ -64,6 +65,7 @@ export function useExamAttempt() {
   const serverOffsetRef = useRef(0);
   const autoSubmitStartedRef = useRef(false);
   const focusLossRecordedRef = useRef(false);
+  const socketRef = useRef<ReturnType<typeof createExamSocket> | null>(null);
 
   const loadAttempt = useCallback(async () => {
     if (!attemptId) return;
@@ -111,25 +113,39 @@ export function useExamAttempt() {
   }, [attemptId, loadAttempt]);
 
   useEffect(() => {
-    if (!attemptId || !submittedStatus || result) return;
-    const checkForPublishedResult = async () => {
-      try {
-        const response = await fetch(`${API_URL}/attempts/${attemptId}`, { credentials: "include" });
-        if (!response.ok) return;
-        const data = await response.json() as AttemptResponse;
-        setResultsAvailable(Boolean(data.resultsAvailable));
-        setResultMessage(data.resultMessage || null);
-        if (data.resultsAvailable && data.result) {
-          setResult(normalizeResult(data.result, data.exam, data.attempt.answers || {}, data.questions.length));
-          setAttempt(data.attempt);
-        }
-      } catch (pollError) {
-        console.error("Result availability check error:", pollError);
+    if (!attemptId) return;
+    const socket = createExamSocket();
+    socketRef.current = socket;
+    const joinAttempt = () => socket.emit("attempt:join", { attemptId });
+    socket.on("connect", joinAttempt);
+    socket.on("attempt:timer", (data: {
+      status?: AttemptData["status"];
+      remainingSeconds?: number;
+      timerPaused?: boolean;
+      serverNow?: string;
+    }) => {
+      if (typeof data.remainingSeconds === "number") setRemainingSeconds(data.remainingSeconds);
+      if (data.serverNow) serverOffsetRef.current = new Date(data.serverNow).getTime() - Date.now();
+      if (data.timerPaused) setTimerPaused(true);
+      if (data.status && data.status !== "IN_PROGRESS") {
+        setRemainingSeconds(0);
+        setAttempt((current) => current ? { ...current, status: data.status! } : current);
+        setSubmittedStatus(data.status === "TIMED_OUT" ? "TIMED_OUT" : "SUBMITTED");
+        void loadAttempt();
       }
+    });
+    socket.on("attempt:resultsChanged", () => void loadAttempt());
+
+    return () => {
+      socket.removeAllListeners();
+      socket.disconnect();
+      if (socketRef.current === socket) socketRef.current = null;
     };
-    const interval = window.setInterval(() => void checkForPublishedResult(), 5000);
-    void checkForPublishedResult();
-    return () => window.clearInterval(interval);
+  }, [attemptId, loadAttempt]);
+
+  useEffect(() => {
+    if (!attemptId || !submittedStatus || result) return;
+    socketRef.current?.emit("attempt:watchResults", { attemptId });
   }, [attemptId, submittedStatus, result]);
 
   const submitExam = useCallback(async (automatic = false) => {
@@ -149,6 +165,7 @@ export function useExamAttempt() {
       }
       if (!response.ok) throw new Error(getErrorMessage(data, "Failed to submit exam."));
 
+      socketRef.current?.emit("attempt:leaveTimer");
       setResultsAvailable(Boolean(data.resultsAvailable));
       setResultMessage(data.resultMessage || null);
       setResult(data.resultsAvailable && data.result && exam
@@ -184,38 +201,7 @@ export function useExamAttempt() {
   }, [attempt, remainingSeconds, submitExam, submittedStatus, timerPaused]);
 
   useEffect(() => {
-    if (!attemptId || !attempt || attempt.status !== "IN_PROGRESS" || submittedStatus || timerPaused) return;
-    const heartbeatIntervalMs = 30_000;
-    const controller = new AbortController();
-    let active = true;
-    let timeout: number | undefined;
-
-    const syncTimer = async () => {
-      try {
-        const response = await fetch(`${API_URL}/attempts/${attemptId}/heartbeat`, {
-          method: "PATCH", credentials: "include", signal: controller.signal,
-        });
-        if (!response.ok || !active) return;
-        const data = await response.json() as { remainingSeconds?: number; timerPaused?: boolean; status?: AttemptData["status"]; serverNow?: string };
-        if (!active) return;
-        if (data.status && data.status !== "IN_PROGRESS") {
-          await loadAttempt();
-          return;
-        }
-        if (typeof data.remainingSeconds === "number") setRemainingSeconds(data.remainingSeconds);
-        if (data.serverNow) serverOffsetRef.current = new Date(data.serverNow).getTime() - Date.now();
-        if (data.timerPaused) setTimerPaused(true);
-      } catch (syncError) {
-        if (active && !(syncError instanceof DOMException && syncError.name === "AbortError")) {
-          console.error("Exam timer sync error:", syncError);
-        }
-      } finally {
-        // Schedule after completion so a slow request can never overlap another heartbeat.
-        if (active) timeout = window.setTimeout(() => void syncTimer(), heartbeatIntervalMs);
-      }
-    };
-
-    timeout = window.setTimeout(() => void syncTimer(), heartbeatIntervalMs);
+    if (!attemptId || !attempt || attempt.status !== "IN_PROGRESS" || submittedStatus) return;
     const pauseOnExit = () => {
       void fetch(`${API_URL}/attempts/${attemptId}/pause`, {
         method: "PATCH", credentials: "include", keepalive: true,
@@ -223,12 +209,9 @@ export function useExamAttempt() {
     };
     window.addEventListener("pagehide", pauseOnExit);
     return () => {
-      active = false;
-      if (timeout !== undefined) window.clearTimeout(timeout);
-      controller.abort();
       window.removeEventListener("pagehide", pauseOnExit);
     };
-  }, [attempt, attemptId, loadAttempt, submittedStatus, timerPaused]);
+  }, [attempt, attemptId, submittedStatus]);
 
   const resumeTimer = useCallback(async () => {
     if (!attemptId) return;

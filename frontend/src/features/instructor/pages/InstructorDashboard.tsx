@@ -417,31 +417,6 @@ function InstructorDashboard() {
     };
 
   // ====================================================
-  // LOADING SCREEN
-  // ====================================================
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 shadow-lg shadow-indigo-200">
-            <Loader2 className="h-7 w-7 animate-spin text-white" />
-          </div>
-
-          <p className="mt-4 text-sm font-bold text-slate-600">
-            Loading instructor
-            workspace...
-          </p>
-
-          <p className="mt-1 text-xs text-slate-400">
-            Please wait a moment
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ====================================================
   // MAIN UI
   // ====================================================
 
@@ -953,8 +928,12 @@ function InstructorDashboard() {
               EMPTY STATE
           ================================================= */}
 
-          {filteredExams.length ===
-          0 ? (
+          {loading ? (
+            <div role="status" aria-live="polite" className="rounded-[24px] border border-slate-200 bg-white px-6 py-12 text-center text-sm font-semibold text-slate-500">
+              <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin text-indigo-600" />
+              Loading your exams…
+            </div>
+          ) : filteredExams.length === 0 ? (
             <div className="rounded-[24px] border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
 
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500">
