@@ -19,10 +19,10 @@ export interface StudentResult {
   attemptId: string;
   status: string;
   submittedAt?: string | null;
-  exam: { title: string; subject?: string; endDate?: string | null };
+  exam: { title: string; subject?: string; endDate?: string | null; questionCount?: number };
   resultsAvailable: boolean;
   resultMessage?: string | null;
-  result: { score: number; totalMarks: number; percentage: number; passed: boolean } | null;
+  result: { score: number; totalMarks: number; correctCount?: number; percentage: number; passed: boolean } | null;
 }
 
 export type FilterType = "all" | "negative" | "no-negative";

@@ -54,12 +54,15 @@ router.get(
       const results = await Promise.all(
         attempts.map(async (attempt) => {
           const exam = await Exam.findById(attempt.examId)
-            .select("title subject endDate totalMarks passingMarks resultsHidden");
+            .select("title subject endDate questionCount totalMarks passingMarks resultsHidden");
 
           if (!exam) return null;
 
           const resultsAvailable = areResultsAvailable(exam, new Date());
           const resultMessage = getResultsUnavailableMessage(exam, new Date());
+          const calculated = resultsAvailable
+            ? await calculateScore(attempt, exam)
+            : null;
 
           return {
             attemptId: attempt._id,
@@ -70,15 +73,19 @@ router.get(
               title: exam.title,
               subject: exam.subject,
               endDate: exam.endDate,
+              questionCount: exam.questionCount,
             },
             resultsAvailable,
             resultMessage,
-            result: resultsAvailable
+            result: calculated
               ? {
-                  score: attempt.score ?? 0,
-                  totalMarks: attempt.totalMarks ?? exam.totalMarks,
-                  percentage: attempt.percentage ?? 0,
-                  passed: attempt.passed ?? false,
+                  score: attempt.score ?? calculated.score,
+                  totalMarks: attempt.totalMarks ?? calculated.totalMarks,
+                  correctCount: calculated.correctCount,
+                  percentage: exam.questionCount > 0
+                    ? Number(((calculated.correctCount / exam.questionCount) * 100).toFixed(2))
+                    : attempt.percentage ?? calculated.percentage,
+                  passed: attempt.passed ?? calculated.passed,
                   passingMarks: exam.passingMarks,
                 }
               : null,

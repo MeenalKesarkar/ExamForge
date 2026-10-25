@@ -67,10 +67,10 @@ export default function StudentResultsSection({
                       {item.resultsAvailable && item.result ? (
                         <div className="mt-5 rounded-xl bg-indigo-50 p-4">
                           <p className="text-sm font-medium text-indigo-700">
-                            Score
+                            Correct answers
                           </p>
                           <p className="mt-1 text-2xl font-extrabold text-indigo-950">
-                            {item.result.score} / {item.result.totalMarks}
+                            {item.result.correctCount ?? item.result.score} / {item.exam.questionCount ?? item.result.totalMarks}
                           </p>
                           <p className="mt-1 text-sm text-indigo-700">
                             {item.result.percentage}%

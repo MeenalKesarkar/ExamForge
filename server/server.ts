@@ -2,12 +2,9 @@
 
 import dns from "node:dns";
 import { createServer } from "node:http";
-// MONGODB ATLAS SRV DNS
-
-dns.setServers([
-  "8.8.8.8",
-  "8.8.4.4",
-]);
+// The machine's configured resolver is refusing MongoDB Atlas SRV lookups.
+// Use public resolvers so mongodb+srv connection strings can discover the nodes.
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 // ENVIRONMENT
 
 import "dotenv/config";// EXPRESS
@@ -312,6 +309,23 @@ const connectDatabase =
           error.message;
 
         if (
+          message.includes("Server selection timed out") ||
+          error.name === "MongooseServerSelectionError"
+        ) {
+          console.error("");
+          console.error(
+            "MongoDB Atlas hosts were discovered, but the app could not reach a primary node."
+          );
+          console.error(
+            "Check that the Atlas cluster is running, add this computer's current public IP under Network Access, and allow outbound TCP on port 27017."
+          );
+          console.error(
+            "A VPN, proxy, or firewall can also block the database connection."
+          );
+          console.error("");
+        }
+
+        if (
           message.includes(
             "querySrv"
           ) ||
@@ -324,15 +338,7 @@ const connectDatabase =
         ) {
           console.error("");
           console.error(
-            "MongoDB Atlas DNS resolution failed."
-          );
-
-          console.error(
-            "The application is using Google DNS:"
-          );
-
-          console.error(
-            "8.8.8.8 / 8.8.4.4"
+            "MongoDB Atlas DNS lookup failed. Check your system DNS settings and confirm the cluster hostname in MONGO_URI is correct."
           );
 
           console.error("");
